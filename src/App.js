@@ -6,6 +6,8 @@ import Profile from './components/Profile';
 import Chat from './components/Chat';
 import TeamManagement from './components/TeamManagement';
 import Calendar from './components/Calendar';
+import JuniorPortal from './components/JuniorPortal';
+import ParentDashboard from './components/ParentDashboard';
 
 // TODO: Import other components as we build them
 
@@ -20,6 +22,8 @@ function App() {
           <Route path="/chat/:roomId" element={<Chat />} />
           <Route path="/team-management" element={<TeamManagement />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/junior-portal" element={<JuniorPortal />} />
+          <Route path="/parent-dashboard/:juniorId" element={<ParentDashboard />} />
           {/* Add more routes here, e.g., <Route path="/dashboard" element={<Dashboard />} /> */}
         </Routes>
       </div>

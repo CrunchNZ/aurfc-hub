@@ -45,4 +45,11 @@ This file tracks the build progress based on requirements.md and user rules. Tas
   - Sub-task 5.3: Update tests and rules. [Complete]
   - Sub-task 5.4: Test scheduling features. [Complete]
 
+- **Task 6: Junior Portal** [Complete]
+  - Sub-task 6.1: Implement notes and content uploads. [Complete]
+  - Sub-task 6.2: Add basic gamification (badges). [Complete]
+  - Sub-task 6.3: Create parent dashboard. [Complete]
+  - Sub-task 6.4: Update tests and rules. [Complete]
+  - Sub-task 6.5: Test junior portal features. [Complete]
+
 (Additional tasks as previously outlined...) 
