@@ -20,9 +20,9 @@ This file tracks the build progress based on requirements.md and user rules. Tas
   - Sub-task 1.5: Test setup. [Complete]
 
 - **Task 2: Authentication and User Management** [In Progress]
-  - Sub-task 2.1: Implement sign-up/login with roles/consent. [In Progress]
-  - Sub-task 2.2: Add password reset/email verification.
-  - Sub-task 2.3: Profile updates with RBAC.
+  - Sub-task 2.1: Implement sign-up/login with roles/consent. [Complete]
+  - Sub-task 2.2: Add password reset/email verification. [Complete]
+  - Sub-task 2.3: Profile updates with RBAC. [In Progress]
   - Sub-task 2.4: Update tests and rules.
   - Sub-task 2.5: Test auth flow.
 
