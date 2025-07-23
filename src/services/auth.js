@@ -58,3 +58,12 @@ export const verifyEmail = async (user) => {
     throw error;
   }
 };
+
+export const updateProfile = async (userId, data) => {
+  try {
+    const userDoc = doc(db, 'users', userId);
+    await setDoc(userDoc, data, { merge: true });
+  } catch (error) {
+    throw error;
+  }
+};

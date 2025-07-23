@@ -1,4 +1,4 @@
-import { signup, login, logout } from '../src/services/auth';
+import { signup, login, logout, updateProfile } from '../src/services/auth';
 import { auth, db } from '../src/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -55,5 +55,13 @@ describe('Auth Service', () => {
 
   test('signup fails without consent for junior role', async () => {
     await expect(signup('junior@example.com', 'password', 'junior', false)).rejects.toThrow('Parental consent required for junior users');
+  });
+
+  test('updateProfile updates user data in Firestore', async () => {
+    const mockUserId = '123';
+    const mockData = { name: 'Test User' };
+    setDoc.mockResolvedValue();
+    await updateProfile(mockUserId, mockData);
+    expect(setDoc).toHaveBeenCalledWith('mockDocRef', mockData, { merge: true });
   });
 });
