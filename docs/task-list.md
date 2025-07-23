@@ -32,4 +32,11 @@ This file tracks the build progress based on requirements.md and user rules. Tas
   - Sub-task 3.3: Create news feed for announcements. [Complete]
   - Sub-task 3.4: Test communication features. [Complete]
 
+- **Task 4: Team Management** [Complete]
+  - Sub-task 4.1: Implement roster building/editing for coaches. [Complete]
+  - Sub-task 4.2: Add performance/injury tracking. [Complete]
+  - Sub-task 4.3: Create drills/playbooks section. [Complete]
+  - Sub-task 4.4: Update tests and rules for RBAC. [Complete]
+  - Sub-task 4.5: Test team management features. [Complete]
+
 (Additional tasks as previously outlined...) 
