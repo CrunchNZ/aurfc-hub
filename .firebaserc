@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "dev": "aurfc-dev-2e9f9",
+    "test": "aurfc-test",
+    "prod": "aurfc-prod"
+  },
+  "targets": {},
+  "etags": {}
+}

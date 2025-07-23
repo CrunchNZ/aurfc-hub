@@ -1,0 +1,9 @@
+- Use descriptive names: e.g., "JuniorPortalComponent" instead of "Comp1"; follow camelCase for variables.
+- Add comments in code: Explain Firebase queries, React hooks, and why (e.g., // Real-time listener for chats).
+- Keep code modular: One component per file in src/components/; services in src/services/ (e.g., authService.js).
+- Use ESLint/Prettier for formatting: Indent with 2 spaces, no unused vars.
+- Security: Always use Firebase Security Rules patterns in code comments.
+- Testing: Write simple tests in /tests/ for key functions (e.g., auth login).
+- TDD: Write tests before code; use Jest in /tests/; remove one-off tests after passing.
+- Modularity: Keep files <300 lines; split into sub-files if needed; use src/services/ for logic.
+- Environments: Use .env files; verbose logs in dev, minimal in prod.

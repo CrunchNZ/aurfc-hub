@@ -1,0 +1,8 @@
+- Always check project_config.md first.
+- Write code that's simple, tested, and follows React/Firebase best practices (e.g., use hooks for state, Firestore for real-time).
+- If stuck, ask me in the chat.
+- For code files: Add explanations and focus on MVP functionality. Prioritize rapid development for today's launch.
+- Incorporate PRD innovations only after core MVP (e.g., add AI ML Kit in phase 2).
+- When using Firebase, use the MCP server tools available in Cursor whenever possible.
+- Whenever you are truly stuck on a task refer to the user for assistance or feedback so we can proceed more efficiently. 
+- Use Github connector in Cursor (or the MCP) to ensure the project is always up to date, as per industry standard process.
