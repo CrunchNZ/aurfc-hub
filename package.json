@@ -32,8 +32,8 @@
     "babel-jest": "^30.0.5",
     "jest": "^30.0.5",
     "jest-environment-jsdom": "^30.0.5",
-    "vite": "^7.0.5",
-    "vite-plugin-pwa": "^1.0.1",
+    "vite": "^5.4.19",
+    "vite-plugin-pwa": "^0.20.5",
     "whatwg-fetch": "^3.6.20"
   }
 }
