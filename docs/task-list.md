@@ -26,4 +26,10 @@ This file tracks the build progress based on requirements.md and user rules. Tas
   - Sub-task 2.4: Update tests and rules. [Complete]
   - Sub-task 2.5: Test auth flow. [Complete]
 
+- **Task 3: Centralized Communication** [Complete]
+  - Sub-task 3.1: Implement in-app chat using Firestore real-time. [Complete]
+  - Sub-task 3.2: Add notifications system. [Complete]
+  - Sub-task 3.3: Create news feed for announcements. [Complete]
+  - Sub-task 3.4: Test communication features. [Complete]
+
 (Additional tasks as previously outlined...) 
