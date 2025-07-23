@@ -39,4 +39,10 @@ This file tracks the build progress based on requirements.md and user rules. Tas
   - Sub-task 4.4: Update tests and rules for RBAC. [Complete]
   - Sub-task 4.5: Test team management features. [Complete]
 
+- **Task 5: Scheduling** [Complete]
+  - Sub-task 5.1: Implement shared calendar for events. [Complete]
+  - Sub-task 5.2: Add RSVPs and attendance tracking. [Complete]
+  - Sub-task 5.3: Update tests and rules. [Complete]
+  - Sub-task 5.4: Test scheduling features. [Complete]
+
 (Additional tasks as previously outlined...) 

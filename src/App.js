@@ -5,6 +5,7 @@ import SignUp from './components/SignUp';
 import Profile from './components/Profile';
 import Chat from './components/Chat';
 import TeamManagement from './components/TeamManagement';
+import Calendar from './components/Calendar';
 
 // TODO: Import other components as we build them
 
@@ -18,6 +19,7 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/chat/:roomId" element={<Chat />} />
           <Route path="/team-management" element={<TeamManagement />} />
+          <Route path="/calendar" element={<Calendar />} />
           {/* Add more routes here, e.g., <Route path="/dashboard" element={<Dashboard />} /> */}
         </Routes>
       </div>
