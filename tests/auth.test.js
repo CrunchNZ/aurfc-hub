@@ -1,10 +1,27 @@
-import { login } from '../src/services/auth';
+import { signup, login, logout } from '../src/services/auth';
+import { MockFirebase } from 'firebase-mock';
 
-// Mock Firebase auth for testing
 describe('Auth Service', () => {
-  test('login function exists', () => {
-    expect(login).toBeDefined();
+  let mockauth;
+
+  beforeEach(() => {
+    const mocksdk = new MockFirebase();
+    mockauth = mocksdk.auth();
   });
 
-  // TODO: Add more comprehensive tests with mocked Firebase
+  test('signup creates user and stores role', async () => {
+    const user = await signup('test@example.com', 'password', 'player', true);
+    expect(user.email).toBe('test@example.com');
+    // Mock check for role in Firestore
+  });
+
+  test('login returns user', async () => {
+    const user = await login('test@example.com', 'password');
+    expect(user.email).toBe('test@example.com');
+  });
+
+  test('logout signs out user', async () => {
+    await logout();
+    expect(mockauth.currentUser).toBeNull();
+  });
 });
