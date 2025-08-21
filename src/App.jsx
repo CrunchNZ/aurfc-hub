@@ -9,6 +9,8 @@ import TeamManagement from './components/TeamManagement';
 import Calendar from './components/Calendar';
 import JuniorPortal from './components/JuniorPortal';
 import ParentDashboard from './components/ParentDashboard';
+import Store from './components/Store/Store';
+import AdminStore from './components/Store/AdminStore';
 import FirebaseTest from './components/FirebaseTest';
 import ProtectedRoute, { 
   AuthenticatedRoute, 
@@ -67,6 +69,18 @@ function App() {
               <ParentRoute>
                 <ParentDashboard />
               </ParentRoute>
+            } />
+            
+            <Route path="/store" element={
+              <AuthenticatedRoute>
+                <Store />
+              </AuthenticatedRoute>
+            } />
+            
+            <Route path="/admin/store" element={
+              <AdminRoute>
+                <AdminStore />
+              </AdminRoute>
             } />
             
             {/* Development/testing routes */}

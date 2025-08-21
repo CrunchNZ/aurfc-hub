@@ -60,6 +60,11 @@ export const mockOrderBy = jest.fn();
 export const mockLimit = jest.fn();
 export const mockStartAfter = jest.fn();
 export const mockServerTimestamp = jest.fn(() => new Date());
+export const mockTimestamp = {
+  now: jest.fn(() => new Date()),
+  fromDate: jest.fn((date) => date),
+  fromMillis: jest.fn((millis) => new Date(millis)),
+};
 export const mockArrayUnion = jest.fn((...args) => args);
 export const mockArrayRemove = jest.fn((...args) => args);
 export const mockWriteBatch = jest.fn();
@@ -139,6 +144,7 @@ export default {
   limit: mockLimit,
   startAfter: mockStartAfter,
   serverTimestamp: mockServerTimestamp,
+  Timestamp: mockTimestamp,
   arrayUnion: mockArrayUnion,
   arrayRemove: mockArrayRemove,
   writeBatch: mockWriteBatch,
