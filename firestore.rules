@@ -1,18 +1,110 @@
-rules_version='2'
+rules_version='2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function hasRole(role) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+    
+    function isAdmin() {
+      return hasRole('admin');
+    }
+    
+    function isCoach() {
+      return hasRole('coach') || isAdmin();
+    }
+    
+    function isPlayer() {
+      return hasRole('player') || isCoach() || isAdmin();
+    }
+    
+    function isParent() {
+      return hasRole('parent') || isAdmin();
+    }
+    
+    function isJunior() {
+      return hasRole('junior') || isAdmin();
+    }
+    
+    function isFamilyMember(userId) {
+      let userData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let targetData = get(/databases/$(database)/documents/users/$(userId)).data;
+      
+      return isAuthenticated() && (
+        isOwner(userId) ||
+        (userData.role == 'parent' && targetData.parentEmail == userData.email) ||
+        (userData.role == 'junior' && targetData.email == userData.parentEmail)
+      );
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || isCoach());
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+    
+    // Teams collection
+    match /teams/{teamId} {
+      allow read: if isAuthenticated();
+      allow write: if isCoach();
+    }
+    
+    // Events collection
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isCoach();
+      allow delete: if isAdmin();
+    }
+    
+    // Chats collection
+    match /chats/{chatId}/messages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // Performances collection
+    match /performances/{performanceId} {
+      allow read: if isAuthenticated() && (
+        isOwner(performanceId) || isCoach() || isAdmin()
+      );
+      allow write: if isCoach() || isAdmin();
+    }
+    
+    // Drills collection
+    match /drills/{drillId} {
+      allow read: if isAuthenticated();
+      allow write: if isCoach() || isAdmin();
+    }
+    
+    // Badges collection
+    match /badges/{badgeId} {
+      allow read: if isAuthenticated();
+      allow write: if isCoach() || isAdmin();
+    }
+    
+    // Juniors collection
+    match /juniors/{juniorId} {
+      allow read: if isFamilyMember(juniorId) || isCoach() || isAdmin();
+      allow write: if isFamilyMember(juniorId) || isCoach() || isAdmin();
+    }
+    
+    // Default rule - deny all other access
     match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2025, 8, 22);
+      allow read, write: if false;
     }
   }
 }

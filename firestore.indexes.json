@@ -21,6 +21,55 @@
   //    },
   //   ]
   // ]
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "mode": "ASCENDING" },
+        { "fieldPath": "teamPreference", "mode": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "startTime", "mode": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "performances",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "playerId", "mode": "ASCENDING" },
+        { "fieldPath": "date", "mode": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "drills",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "category", "mode": "ASCENDING" },
+        { "fieldPath": "difficulty", "mode": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "mode": "ASCENDING" },
+        { "fieldPath": "role", "mode": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "mode": "ASCENDING" },
+        { "fieldPath": "startTime", "mode": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

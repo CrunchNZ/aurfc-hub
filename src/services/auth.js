@@ -1,7 +1,14 @@
 import { auth } from '../firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, updateProfile as updateAuthProfile } from 'firebase/auth';
-import { db } from '../firebase';
-import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  sendPasswordResetEmail, 
+  sendEmailVerification, 
+  updateProfile as updateAuthProfile,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { usersService } from './database';
 
 export { auth };
 
@@ -22,7 +29,7 @@ export const signup = async (email, password, userData) => {
       displayName: `${firstName} ${lastName}`
     });
     
-    // Create user document in Firestore
+    // Create user document in Firestore using the database service
     const userDoc = {
       uid: user.uid,
       email,
@@ -33,14 +40,12 @@ export const signup = async (email, password, userData) => {
       teamPreference: teamPreference || null,
       parentEmail: role === 'junior' ? parentEmail : null,
       consent: role === 'junior' ? consent : true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
       isActive: true,
       emailVerified: user.emailVerified,
       profileComplete: false
     };
     
-    await setDoc(doc(db, 'users', user.uid), userDoc);
+    await usersService.createUser(user.uid, userDoc);
     
     // Send verification email
     if (!user.emailVerified) {
@@ -75,11 +80,7 @@ export const logout = async () => {
 // Get user data from Firestore
 export const getUserData = async (uid) => {
   try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
-    if (userDoc.exists()) {
-      return userDoc.data();
-    }
-    return null;
+    return await usersService.getUser(uid);
   } catch (error) {
     throw error;
   }
@@ -107,9 +108,7 @@ export const hasPermission = (userRole, requiredRoles) => {
 // Get users by role
 export const getUsersByRole = async (role) => {
   try {
-    const q = query(collection(db, 'users'), where('role', '==', role));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return await usersService.getUsersByRole(role);
   } catch (error) {
     throw error;
   }
@@ -131,14 +130,84 @@ export const verifyEmail = async (user) => {
   }
 };
 
+// Session management
+export const getCurrentUser = () => {
+  return auth.currentUser;
+};
+
+// Check if user is authenticated
+export const isAuthenticated = () => {
+  return !!auth.currentUser;
+};
+
+// Get current user's role
+export const getCurrentUserRole = async () => {
+  try {
+    const user = auth.currentUser;
+    if (!user) return null;
+    
+    const userData = await getUserData(user.uid);
+    return userData?.role || null;
+  } catch (error) {
+    console.error('Error getting current user role:', error);
+    return null;
+  }
+};
+
+// Check if current user has specific role
+export const hasRole = async (requiredRole) => {
+  try {
+    const userRole = await getCurrentUserRole();
+    return userRole === requiredRole;
+  } catch (error) {
+    console.error('Error checking user role:', error);
+    return false;
+  }
+};
+
+// Check if current user has any of the required roles
+export const hasAnyRole = async (requiredRoles) => {
+  try {
+    const userRole = await getCurrentUserRole();
+    return requiredRoles.includes(userRole);
+  } catch (error) {
+    console.error('Error checking user roles:', error);
+    return false;
+  }
+};
+
+// Listen to authentication state changes
+export const onAuthStateChange = (callback) => {
+  return onAuthStateChanged(auth, callback);
+};
+
+// Get user profile with role-based data
+export const getCurrentUserProfile = async () => {
+  try {
+    const user = auth.currentUser;
+    if (!user) return null;
+    
+    const userData = await getUserData(user.uid);
+    if (!userData) return null;
+    
+    // Add additional role-specific data
+    if (userData.role === 'junior') {
+      // Import junior service dynamically to avoid circular dependencies
+      const { juniorsService } = await import('./database');
+      const juniorProfile = await juniorsService.getJuniorProfile(user.uid);
+      return { ...userData, juniorProfile };
+    }
+    
+    return userData;
+  } catch (error) {
+    console.error('Error getting current user profile:', error);
+    return null;
+  }
+};
+
 export const updateUserProfile = async (userId, data) => {
   try {
-    const userDoc = doc(db, 'users', userId);
-    const updateData = {
-      ...data,
-      updatedAt: new Date()
-    };
-    await setDoc(userDoc, updateData, { merge: true });
+    return await usersService.updateUser(userId, data);
   } catch (error) {
     throw error;
   }

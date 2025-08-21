@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { auth, updateProfile } from '../services/auth';
+import { auth, updateUserProfile } from '../services/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -23,7 +23,7 @@ function Profile() {
   const handleUpdate = async (e) => {
     e.preventDefault();
     try {
-      await updateProfile(user.uid, { name });
+      await updateUserProfile(user.uid, { name });
       alert('Profile updated');
     } catch (err) {
       setError(err.message);
