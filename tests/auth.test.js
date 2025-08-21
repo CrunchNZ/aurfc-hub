@@ -1,22 +1,19 @@
 import { signup, login, logout, updateUserProfile } from '../src/services/auth';
 import { auth, db } from '../src/firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, sendEmailVerification } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  updateProfile, 
+  sendEmailVerification 
+} from 'firebase/auth';
+import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
+// Mock the Firebase modules
 jest.mock('../src/firebase', () => ({
-  auth: jest.fn(),
-  db: jest.fn(),
-}));
-jest.mock('firebase/auth', () => ({
-  createUserWithEmailAndPassword: jest.fn(),
-  signInWithEmailAndPassword: jest.fn(),
-  signOut: jest.fn(),
-  updateProfile: jest.fn(),
-  sendEmailVerification: jest.fn(),
-}));
-jest.mock('firebase/firestore', () => ({
-  doc: jest.fn(),
-  setDoc: jest.fn(),
+  auth: { currentUser: null },
+  db: {},
+  storage: {},
 }));
 
 describe('Auth Service', () => {
@@ -89,12 +86,12 @@ describe('Auth Service', () => {
     const mockUserId = '123';
     const mockData = { name: 'Test User' };
     doc.mockReturnValue('mockDocRef');
-    setDoc.mockResolvedValue();
+    updateDoc.mockResolvedValue();
     await updateUserProfile(mockUserId, mockData);
     expect(doc).toHaveBeenCalledWith(db, 'users', mockUserId);
-    expect(setDoc).toHaveBeenCalledWith('mockDocRef', expect.objectContaining({
+    expect(updateDoc).toHaveBeenCalledWith('mockDocRef', expect.objectContaining({
       name: 'Test User',
       updatedAt: expect.any(Date)
-    }), { merge: true });
+    }));
   });
 });
