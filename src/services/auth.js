@@ -3,6 +3,8 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, se
 import { db } from '../firebase';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
+export { auth };
+
 // Sign up new user
 export const signup = async (email, password, userData) => {
   const { role, firstName, lastName, dateOfBirth, parentEmail, consent, teamPreference } = userData;

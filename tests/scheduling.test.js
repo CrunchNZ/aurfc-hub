@@ -25,11 +25,13 @@ describe('Scheduling Service', () => {
   test('rsvpEvent adds user to RSVPs', async () => {
     const mockRef = 'mockDocRef';
     doc.mockReturnValue(mockRef);
-    arrayUnion.mockReturnValue('mockUnion');
+    const mockUnion = 'mockUnion';
+    arrayUnion.mockReturnValue(mockUnion);
     updateDoc.mockResolvedValue();
     await rsvpEvent('event1', 'user123');
     expect(doc).toHaveBeenCalledWith(db, 'events', 'event1');
-    expect(updateDoc).toHaveBeenCalledWith(mockRef, { rsvps: 'mockUnion' });
+    expect(arrayUnion).toHaveBeenCalledWith('user123');
+    expect(updateDoc).toHaveBeenCalledWith(mockRef, { rsvps: mockUnion });
   });
 
   test('trackAttendance updates attendance', async () => {
