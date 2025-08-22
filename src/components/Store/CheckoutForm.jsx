@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { useAuth } from '../../contexts/AuthContext';
-import './CheckoutForm.css';
+
 
 // Initialize Stripe (this should be moved to environment variables)
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_test_key');
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_test_key');
 
 const CheckoutForm = ({ cart, total, user, onComplete, onCancel }) => {
   const { user: authUser } = useAuth();

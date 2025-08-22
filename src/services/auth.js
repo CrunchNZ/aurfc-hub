@@ -47,6 +47,22 @@ export const signup = async (email, password, userData) => {
     
     await usersService.createUser(user.uid, userDoc);
     
+    // If user is a parent, create parent account
+    if (role === 'parent') {
+      try {
+        const { createParentAccount } = await import('./parent');
+        await createParentAccount(user.uid, {
+          firstName,
+          lastName,
+          email,
+          phone: userData.phone || null
+        });
+      } catch (parentError) {
+        console.warn('Failed to create parent account:', parentError);
+        // Don't fail the signup if parent account creation fails
+      }
+    }
+    
     // Send verification email
     if (!user.emailVerified) {
       await sendEmailVerification(user);
@@ -144,13 +160,24 @@ export const isAuthenticated = () => {
 export const getCurrentUserRole = async () => {
   try {
     const user = auth.currentUser;
-    if (!user) return null;
+    if (!user) {
+      console.log('No current user found');
+      return null;
+    }
     
+    console.log('Getting user data for UID:', user.uid);
     const userData = await getUserData(user.uid);
-    return userData?.role || null;
+    console.log('User data retrieved:', userData);
+    
+    if (!userData) {
+      console.warn('No user data found in Firestore');
+      return null;
+    }
+    
+    return userData.role || null;
   } catch (error) {
     console.error('Error getting current user role:', error);
-    return null;
+    throw error; // Re-throw to show actual error message
   }
 };
 

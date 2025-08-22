@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   createEvent,
   getEventsForMonth,
@@ -8,7 +8,18 @@ import {
   EVENT_TYPES,
   RSVP_STATUS
 } from '../services/scheduling';
-import { AuthContext } from '../contexts/AuthContext';
+import { 
+  downloadICalFile, 
+  openGoogleCalendar, 
+  downloadAppleCalendarFile,
+  exportEvents 
+} from '../services/calendar-export';
+import { 
+  openOptimalDirections, 
+  formatLocationForDirections,
+  getTravelModeOptions 
+} from '../services/directions';
+import { useAuth } from '../contexts/AuthContext';
 import { getCurrentUserRole } from '../services/auth';
 
 function Calendar() {
@@ -20,6 +31,10 @@ function Calendar() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [showDirections, setShowDirections] = useState(false);
+  const [travelMode, setTravelMode] = useState('driving');
   
   // Form states
   const [newEventForm, setNewEventForm] = useState({
@@ -33,7 +48,7 @@ function Calendar() {
     targetRoles: ['all']
   });
 
-  const { user } = useContext(AuthContext);
+  const { currentUser: user } = useAuth();
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -53,31 +68,51 @@ function Calendar() {
   useEffect(() => {
     if (user && userRole) {
       setLoading(true);
+      setError(''); // Clear any previous errors
       
-      // Get events for current month
-      const unsubscribeMonthEvents = getEventsForMonth(
-        currentDate.getFullYear(),
-        currentDate.getMonth(),
-        (monthEvents) => {
-          setEvents(monthEvents);
-          setLoading(false);
-        },
-        userRole
-      );
+      // Add timeout to prevent infinite loading
+      const loadingTimeout = setTimeout(() => {
+        setLoading(false);
+        setError('Loading timeout - please refresh the page');
+      }, 10000); // 10 second timeout
+      
+      try {
+        // Get events for current month
+        const unsubscribeMonthEvents = getEventsForMonth(
+          currentDate.getFullYear(),
+          currentDate.getMonth(),
+          (monthEvents) => {
+            setEvents(monthEvents);
+            setLoading(false);
+            clearTimeout(loadingTimeout);
+          },
+          userRole
+        );
 
-      // Get upcoming events
-      const unsubscribeUpcoming = getUpcomingEvents(
-        (upcoming) => {
-          setUpcomingEvents(upcoming);
-        },
-        userRole,
-        5
-      );
+        // Get upcoming events
+        const unsubscribeUpcoming = getUpcomingEvents(
+          (upcoming) => {
+            setUpcomingEvents(upcoming);
+          },
+          userRole,
+          5
+        );
 
-      return () => {
-        unsubscribeMonthEvents();
-        unsubscribeUpcoming();
-      };
+        return () => {
+          clearTimeout(loadingTimeout);
+          if (unsubscribeMonthEvents && typeof unsubscribeMonthEvents === 'function') {
+            unsubscribeMonthEvents();
+          }
+          if (unsubscribeUpcoming && typeof unsubscribeUpcoming === 'function') {
+            unsubscribeUpcoming();
+          }
+        };
+      } catch (error) {
+        console.error('Error setting up calendar listeners:', error);
+        setError('Failed to load calendar: ' + error.message);
+        setLoading(false);
+        clearTimeout(loadingTimeout);
+      }
     }
   }, [user, userRole, currentDate]);
 
@@ -87,11 +122,33 @@ function Calendar() {
     
     try {
       setError('');
-      await createEvent({
-        ...newEventForm,
-        date: new Date(newEventForm.date + 'T' + newEventForm.startTime)
-      }, user);
+      setLoading(true);
       
+      // Validate required fields
+      if (!newEventForm.title || !newEventForm.date || !newEventForm.startTime) {
+        setError('Title, date, and start time are required');
+        setLoading(false);
+        return;
+      }
+      
+      // Create event data
+      const eventData = {
+        title: newEventForm.title,
+        description: newEventForm.description,
+        type: newEventForm.type,
+        date: new Date(newEventForm.date + 'T' + newEventForm.startTime),
+        startTime: newEventForm.startTime,
+        endTime: newEventForm.endTime || null,
+        location: newEventForm.location || '',
+        targetRoles: ['all']
+      };
+      
+      console.log('Creating event with data:', eventData);
+      
+      const createdEvent = await createEvent(eventData, user);
+      console.log('Event created successfully:', createdEvent);
+      
+      // Reset form
       setNewEventForm({
         title: '',
         description: '',
@@ -102,10 +159,21 @@ function Calendar() {
         location: '',
         targetRoles: ['all']
       });
+      
       setShowCreateEvent(false);
+      setError('');
+      
+      // Refresh events
+      if (userRole) {
+        // Force refresh by updating current date
+        setCurrentDate(new Date());
+      }
+      
     } catch (error) {
       console.error('Error creating event:', error);
-      setError('Failed to create event. Please try again.');
+      setError('Failed to create event: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -113,11 +181,9 @@ function Calendar() {
     if (!user) return;
     
     try {
-      setError('');
       await rsvpEvent(eventId, user.uid, status);
     } catch (error) {
-      console.error('Error RSVPing to event:', error);
-      setError('Failed to RSVP. Please try again.');
+      setError('Failed to RSVP: ' + error.message);
     }
   };
 
@@ -125,23 +191,142 @@ function Calendar() {
     if (!user) return;
     
     try {
-      setError('');
       await removeRsvp(eventId, user.uid);
     } catch (error) {
-      console.error('Error removing RSVP:', error);
-      setError('Failed to remove RSVP. Please try again.');
+      setError('Failed to remove RSVP: ' + error.message);
     }
   };
 
-  // Calendar utility functions
-  const getDaysInMonth = (date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
+  // Calendar export handlers
+  const handleExportEvents = (format, period = 'all') => {
+    const eventsToExport = period === 'all' ? events : 
+                          period === 'upcoming' ? upcomingEvents : 
+                          getEventsForDate(selectedDate);
+    
+    exportEvents(eventsToExport, period, format);
+    setShowExportOptions(false);
+  };
+
+  const handleExportSingleEvent = (event, format) => {
+    switch (format) {
+      case 'ical':
+        downloadICalFile([event], `${event.title.replace(/\s+/g, '-')}.ics`);
+        break;
+      case 'google':
+        openGoogleCalendar(event);
+        break;
+      case 'apple':
+        downloadAppleCalendarFile(event, `${event.title.replace(/\s+/g, '-')}.ics`);
+        break;
+      default:
+        downloadICalFile([event], `${event.title.replace(/\s+/g, '-')}.ics`);
+    }
+  };
+
+  // Directions handlers
+  const handleGetDirections = (event) => {
+    setSelectedEvent(event);
+    setShowDirections(true);
+  };
+
+  const handleOpenDirections = () => {
+    if (selectedEvent && selectedEvent.location) {
+      const location = formatLocationForDirections(selectedEvent.location);
+      openOptimalDirections(location, '', travelMode);
+      setShowDirections(false);
+      setSelectedEvent(null);
+    }
+  };
+
+  // Helper functions
+  const getEventsForDate = (date) => {
+    if (!date) return [];
+    return events.filter(event => {
+      try {
+        if (!event.date) return false;
+        const eventDate = event.date.toDate ? event.date.toDate() : new Date(event.date);
+        return eventDate.toDateString() === date.toDateString();
+      } catch (error) {
+        console.warn('Error processing event date:', error, event);
+        return false;
+      }
+    });
+  };
+
+  const getUserRSVP = (event) => {
+    if (!user || !event.rsvps) return null;
+    return event.rsvps[user.uid] || null;
+  };
+
+  const formatDate = (date) => {
+    return new Intl.DateTimeFormat('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
+    }).format(date);
+  };
+
+  const formatTime = (time) => {
+    try {
+      if (!time) return '';
+      if (typeof time === 'string') {
+        return time;
+      }
+      if (time.toDate) {
+        time = time.toDate();
+      }
+      if (time instanceof Date) {
+        return time.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+      }
+      return String(time);
+    } catch (error) {
+      console.warn('Error formatting time:', error, time);
+      return String(time || '');
+    }
+  };
+
+  const getEventTypeIcon = (type) => {
+    const icons = {
+      [EVENT_TYPES.TRAINING]: '🏃',
+      [EVENT_TYPES.GAME]: '🏉',
+      [EVENT_TYPES.EVENT]: '📅'
+    };
+    return icons[type] || '📅';
+  };
+
+  const isToday = (date) => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  const isSelected = (date) => {
+    return selectedDate && date.toDateString() === selectedDate.toDateString();
+  };
+
+  // Generate time options with 5-minute intervals
+  const generateTimeOptions = () => {
+    const times = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 5) {
+        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        times.push(timeString);
+      }
+    }
+    return times;
+  };
+
+  const timeOptions = generateTimeOptions();
+
+  const getDaysInMonth = (year, month) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDayOfWeek = firstDay.getDay();
-
+    
     const days = [];
     
     // Add empty cells for days before the first day of the month
@@ -149,7 +334,7 @@ function Calendar() {
       days.push(null);
     }
     
-    // Add days of the month
+    // Add all days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       days.push(new Date(year, month, day));
     }
@@ -157,666 +342,575 @@ function Calendar() {
     return days;
   };
 
-  const getEventsForDate = (date) => {
-    if (!date) return [];
-    return events.filter(event => {
-      const eventDate = event.date.toDate ? event.date.toDate() : new Date(event.date);
-      return eventDate.toDateString() === date.toDateString();
-    });
+  const days = getDaysInMonth(currentDate.getFullYear(), currentDate.getMonth());
+
+  const goToPreviousMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   };
 
-  const formatTime = (timeString) => {
-    if (!timeString) return '';
-    const [hours, minutes] = timeString.split(':');
-    const date = new Date();
-    date.setHours(parseInt(hours), parseInt(minutes));
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const goToNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
-  const formatDate = (date) => {
-    return date.toLocaleDateString([], { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
+  const goToToday = () => {
+    setCurrentDate(new Date());
+    setSelectedDate(new Date());
   };
 
-  const getEventTypeIcon = (type) => {
-    switch (type) {
-      case EVENT_TYPES.TRAINING:
-        return '🏃';
-      case EVENT_TYPES.MATCH:
-        return '🏉';
-      case EVENT_TYPES.MEETING:
-        return '👥';
-      case EVENT_TYPES.SOCIAL:
-        return '🎉';
-      case EVENT_TYPES.FUNDRAISING:
-        return '💰';
-      case EVENT_TYPES.TOURNAMENT:
-        return '🏆';
-      default:
-        return '📅';
-    }
-  };
-
-  const getUserRSVP = (event) => {
-    if (!user || !event.rsvps) return null;
-    return event.rsvps[user.uid];
-  };
-
-  const canCreateEvents = userRole === 'coach' || userRole === 'admin';
-
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-  if (!user) {
+  if (loading) {
     return (
-      <div className="calendar-container">
-        <div className="login-message">
-          Please log in to view the calendar.
+      <div className="min-h-screen bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white text-lg">Loading calendar...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="calendar-container">
-      <div className="calendar-header">
-        <div className="calendar-navigation">
-          <button 
-            onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
-            className="nav-btn"
-          >
-            ← Previous
-          </button>
-          <h2 className="current-month">
-            {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-          </h2>
-          <button 
-            onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
-            className="nav-btn"
-          >
-            Next →
-          </button>
-        </div>
-        
-        {canCreateEvents && (
-          <button 
-            onClick={() => setShowCreateEvent(!showCreateEvent)}
-            className="create-event-btn"
-          >
-            {showCreateEvent ? 'Cancel' : 'Create Event'}
-          </button>
-        )}
-      </div>
-
-      {error && (
-        <div className="error-message">
-          {error}
-        </div>
-      )}
-
-      {showCreateEvent && (
-        <div className="create-event-form">
-          <h3>Create New Event</h3>
-          <form onSubmit={handleCreateEvent}>
-            <div className="form-row">
-              <input
-                type="text"
-                placeholder="Event title"
-                value={newEventForm.title}
-                onChange={(e) => setNewEventForm({...newEventForm, title: e.target.value})}
-                required
-              />
-              <select
-                value={newEventForm.type}
-                onChange={(e) => setNewEventForm({...newEventForm, type: e.target.value})}
+    <div className="min-h-screen bg-gradient-to-br from-primary to-secondary p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-card shadow-lg p-6 mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-primary mb-2">Calendar</h1>
+              <p className="text-text-secondary">Manage your schedule and events</p>
+            </div>
+            
+            <div className="flex flex-wrap gap-3">
+              {/* Export Options Button */}
+              <button
+                onClick={() => setShowExportOptions(!showExportOptions)}
+                className="bg-accent-gold text-text-primary px-4 py-2 rounded-lg hover:bg-yellow-500 transition-colors duration-200 flex items-center gap-2"
               >
-                <option value={EVENT_TYPES.TRAINING}>Training</option>
-                <option value={EVENT_TYPES.MATCH}>Match</option>
-                <option value={EVENT_TYPES.MEETING}>Meeting</option>
-                <option value={EVENT_TYPES.SOCIAL}>Social</option>
-                <option value={EVENT_TYPES.FUNDRAISING}>Fundraising</option>
-                <option value={EVENT_TYPES.TOURNAMENT}>Tournament</option>
-              </select>
-            </div>
-            
-            <div className="form-row">
-              <input
-                type="date"
-                value={newEventForm.date}
-                onChange={(e) => setNewEventForm({...newEventForm, date: e.target.value})}
-                required
-              />
-              <input
-                type="time"
-                placeholder="Start time"
-                value={newEventForm.startTime}
-                onChange={(e) => setNewEventForm({...newEventForm, startTime: e.target.value})}
-                required
-              />
-            </div>
-            
-            <input
-              type="text"
-              placeholder="Location"
-              value={newEventForm.location}
-              onChange={(e) => setNewEventForm({...newEventForm, location: e.target.value})}
-            />
-            
-            <textarea
-              placeholder="Event description"
-              value={newEventForm.description}
-              onChange={(e) => setNewEventForm({...newEventForm, description: e.target.value})}
-              rows="3"
-            />
-            
-            <button type="submit">Create Event</button>
-          </form>
-        </div>
-      )}
-
-      <div className="calendar-content">
-        <div className="calendar-grid">
-          <div className="calendar-header-row">
-            {dayNames.map(day => (
-              <div key={day} className="day-header">
-                {day}
-              </div>
-            ))}
-          </div>
-          
-          <div className="calendar-body">
-            {getDaysInMonth(currentDate).map((day, index) => {
-              const dayEvents = day ? getEventsForDate(day) : [];
-              const isSelected = selectedDate && day && day.toDateString() === selectedDate.toDateString();
-              const isToday = day && day.toDateString() === new Date().toDateString();
+                📅 Export
+              </button>
               
-              return (
-                <div 
-                  key={index} 
-                  className={`calendar-day ${!day ? 'empty' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
-                  onClick={() => day && setSelectedDate(day)}
+              {/* Create Event Button */}
+              {userRole === 'admin' || userRole === 'coach' ? (
+                <button
+                  onClick={() => setShowCreateEvent(!showCreateEvent)}
+                  className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors duration-200 flex items-center gap-2"
                 >
-                  {day && (
-                    <>
-                      <div className="day-number">{day.getDate()}</div>
-                      {dayEvents.length > 0 && (
-                        <div className="day-events">
-                          {dayEvents.slice(0, 2).map(event => (
-                            <div key={event.id} className={`event-dot ${event.type}`}>
-                              {getEventTypeIcon(event.type)}
-                            </div>
-                          ))}
-                          {dayEvents.length > 2 && (
-                            <div className="more-events">+{dayEvents.length - 2}</div>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            })}
+                  ➕ Create Event
+                </button>
+              ) : null}
+            </div>
           </div>
+
+          {/* Export Options Dropdown */}
+          {showExportOptions && (
+            <div className="mt-4 p-4 bg-secondary-light rounded-lg border border-secondary">
+              <h3 className="font-semibold text-text-primary mb-3">Export Calendar</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <h4 className="font-medium text-text-secondary mb-2">Export Period</h4>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => handleExportEvents('ical', 'week')}
+                      className="w-full text-left px-3 py-2 bg-white rounded border hover:bg-secondary-light transition-colors"
+                    >
+                      📅 This Week
+                    </button>
+                    <button
+                      onClick={() => handleExportEvents('ical', 'month')}
+                      className="w-full text-left px-3 py-2 bg-white rounded border hover:bg-secondary-light transition-colors"
+                    >
+                      📅 This Month
+                    </button>
+                    <button
+                      onClick={() => handleExportEvents('ical', 'all')}
+                      className="w-full text-left px-3 py-2 bg-white rounded border hover:bg-secondary-light transition-colors"
+                    >
+                      📅 All Events
+                    </button>
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="font-medium text-text-secondary mb-2">Export Format</h4>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => handleExportEvents('ical', 'upcoming')}
+                      className="w-full text-left px-3 py-2 bg-white rounded border hover:bg-secondary-light transition-colors"
+                    >
+                      📱 iCal File
+                    </button>
+                    <button
+                      onClick={() => handleExportEvents('google', 'upcoming')}
+                      className="w-full text-left px-3 py-2 bg-white rounded border hover:bg-secondary-light transition-colors"
+                    >
+                      🌐 Google Calendar
+                    </button>
+                    <button
+                      onClick={() => handleExportEvents('apple', 'upcoming')}
+                      className="w-full text-left px-3 py-2 bg-white rounded border hover:bg-secondary-light transition-colors"
+                    >
+                      🍎 Apple Calendar
+                    </button>
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="font-medium text-text-secondary mb-2">Quick Actions</h4>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => handleExportEvents('ical', 'upcoming')}
+                      className="w-full px-3 py-2 bg-primary text-white rounded hover:bg-primary-dark transition-colors"
+                    >
+                      📥 Download All Upcoming
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Create Event Form */}
+          {showCreateEvent && (
+            <div className="mt-6 p-4 bg-white rounded-lg border border-secondary shadow-lg">
+              <h3 className="font-semibold text-text-primary mb-4">Create New Event</h3>
+              <form onSubmit={handleCreateEvent} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
+                      Event Title *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter event title"
+                      value={newEventForm.title}
+                      onChange={(e) => setNewEventForm({...newEventForm, title: e.target.value})}
+                      className="w-full px-3 py-2 border border-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary text-text-primary bg-white"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
+                      Event Type
+                    </label>
+                    <select
+                      value={newEventForm.type}
+                      onChange={(e) => setNewEventForm({...newEventForm, type: e.target.value})}
+                      className="w-full px-3 py-2 border border-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary text-text-primary bg-white"
+                    >
+                      {Object.values(EVENT_TYPES).map(type => (
+                        <option key={type} value={type}>
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
+                      Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={newEventForm.date}
+                      onChange={(e) => setNewEventForm({...newEventForm, date: e.target.value})}
+                      className="w-full px-3 py-2 border border-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary text-text-primary bg-white"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
+                      Start Time *
+                    </label>
+                    <select
+                      value={newEventForm.startTime}
+                      onChange={(e) => setNewEventForm({...newEventForm, startTime: e.target.value})}
+                      className="w-full px-3 py-2 border border-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary text-text-primary bg-white"
+                      required
+                    >
+                      <option value="">Select start time</option>
+                      {timeOptions.map(time => (
+                        <option key={time} value={time}>{time}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
+                      End Time (Optional)
+                    </label>
+                    <select
+                      value={newEventForm.endTime}
+                      onChange={(e) => setNewEventForm({...newEventForm, endTime: e.target.value})}
+                      className="w-full px-3 py-2 border border-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary text-text-primary bg-white"
+                    >
+                      <option value="">Select end time (optional)</option>
+                      {timeOptions.map(time => (
+                        <option key={time} value={time}>{time}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
+                      Location (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter event location"
+                      value={newEventForm.location}
+                      onChange={(e) => setNewEventForm({...newEventForm, location: e.target.value})}
+                      className="w-full px-3 py-2 border border-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary text-text-primary bg-white"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">
+                    Event Description (Optional)
+                  </label>
+                  <textarea
+                    placeholder="Enter event description"
+                    value={newEventForm.description}
+                    onChange={(e) => setNewEventForm({...newEventForm, description: e.target.value})}
+                    className="w-full px-3 py-2 border border-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary text-text-primary bg-white"
+                    rows="3"
+                  />
+                </div>
+                
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-primary text-white px-6 py-2 rounded hover:bg-primary-dark transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Creating...
+                      </>
+                    ) : (
+                      'Create Event'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateEvent(false)}
+                    className="bg-secondary text-text-primary px-6 py-2 rounded hover:bg-secondary-dark transition-colors duration-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
         </div>
 
-        <div className="calendar-sidebar">
-          <div className="upcoming-events">
-            <h3>Upcoming Events</h3>
-            {upcomingEvents.length > 0 ? (
-              <div className="events-list">
-                {upcomingEvents.map(event => {
-                  const eventDate = event.date.toDate ? event.date.toDate() : new Date(event.date);
-                  const userRSVP = getUserRSVP(event);
-                  
+        {/* Calendar Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Main Calendar */}
+          <div className="lg:col-span-3">
+            <div className="bg-white rounded-card shadow-lg p-6">
+              {/* Calendar Navigation */}
+              <div className="flex items-center justify-between mb-6">
+                <button
+                  onClick={goToPreviousMonth}
+                  className="p-2 hover:bg-secondary-light rounded transition-colors duration-200"
+                >
+                  ←
+                </button>
+                
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-primary">
+                    {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </h2>
+                  <button
+                    onClick={goToToday}
+                    className="text-sm text-accent-gold hover:text-yellow-600 transition-colors duration-200"
+                  >
+                    Today
+                  </button>
+                </div>
+                
+                <button
+                  onClick={goToNextMonth}
+                  className="p-2 hover:bg-secondary-light rounded transition-colors duration-200"
+                >
+                  →
+                </button>
+              </div>
+
+              {/* Calendar Days */}
+              <div className="grid grid-cols-7 gap-1 mb-4">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-center font-semibold text-text-secondary py-2">
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {days.map((day, index) => {
+                  if (!day) {
+                    return <div key={index} className="h-24"></div>;
+                  }
+
+                  const dayEvents = getEventsForDate(day);
+                  const isToday = day.toDateString() === new Date().toDateString();
+                  const isSelected = selectedDate && day.toDateString() === selectedDate.toDateString();
+
                   return (
-                    <div key={event.id} className="event-card">
-                      <div className="event-header">
-                        <span className="event-icon">{getEventTypeIcon(event.type)}</span>
-                        <div className="event-info">
-                          <h4>{event.title}</h4>
-                          <p>{formatDate(eventDate)}</p>
-                          {event.startTime && (
-                            <p>{formatTime(event.startTime)} - {formatTime(event.endTime)}</p>
+                    <div
+                      key={index}
+                      className={`h-24 p-2 border border-secondary-light rounded cursor-pointer transition-all duration-200 hover:bg-secondary-light ${
+                        !day ? 'bg-gray-50' : ''
+                      } ${
+                        isSelected ? 'bg-primary/10 border-primary' : ''
+                      } ${
+                        isToday ? 'bg-accent-gold/20 border-2 border-accent-gold' : ''
+                      }`}
+                      onClick={() => day && setSelectedDate(day)}
+                    >
+                      {day && (
+                        <>
+                          <div className="font-semibold text-text-primary mb-2">
+                            {day.getDate()}
+                          </div>
+                          {dayEvents.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {dayEvents.slice(0, 2).map(event => (
+                                <div key={event.id} className="text-xs p-1 bg-primary/20 rounded">
+                                  {getEventTypeIcon(event.type)}
+                                </div>
+                              ))}
+                              {dayEvents.length > 2 && (
+                                <div className="text-xs text-text-secondary bg-secondary-light px-2 py-1 rounded">
+                                  +{dayEvents.length - 2}
+                                </div>
+                              )}
+                            </div>
                           )}
-                          {event.location && <p>📍 {event.location}</p>}
-                        </div>
-                      </div>
-                      
-                      {event.description && (
-                        <p className="event-description">{event.description}</p>
+                        </>
                       )}
-                      
-                      <div className="event-actions">
-                        {userRSVP ? (
-                          <div className="rsvp-status">
-                            <span>RSVP: {userRSVP.status.toUpperCase()}</span>
-                            <button 
-                              onClick={() => handleRemoveRSVP(event.id)}
-                              className="remove-rsvp-btn"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="rsvp-buttons">
-                            <button 
-                              onClick={() => handleRSVP(event.id, RSVP_STATUS.YES)}
-                              className="rsvp-btn yes"
-                            >
-                              Yes
-                            </button>
-                            <button 
-                              onClick={() => handleRSVP(event.id, RSVP_STATUS.MAYBE)}
-                              className="rsvp-btn maybe"
-                            >
-                              Maybe
-                            </button>
-                            <button 
-                              onClick={() => handleRSVP(event.id, RSVP_STATUS.NO)}
-                              className="rsvp-btn no"
-                            >
-                              No
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="event-stats">
-                        <span>RSVPs: {event.rsvpCount || 0}</span>
-                        <span>Attended: {event.attendanceCount || 0}</span>
-                      </div>
                     </div>
                   );
                 })}
               </div>
-            ) : (
-              <p>No upcoming events.</p>
-            )}
+            </div>
           </div>
 
-          {selectedDate && (
-            <div className="selected-date-events">
-              <h3>Events on {formatDate(selectedDate)}</h3>
-              {getEventsForDate(selectedDate).length > 0 ? (
-                <div className="events-list">
-                  {getEventsForDate(selectedDate).map(event => (
-                    <div key={event.id} className="event-card">
-                      <div className="event-header">
-                        <span className="event-icon">{getEventTypeIcon(event.type)}</span>
-                        <div className="event-info">
-                          <h4>{event.title}</h4>
-                          {event.startTime && (
-                            <p>{formatTime(event.startTime)} - {formatTime(event.endTime)}</p>
+          {/* Calendar Sidebar */}
+          <div className="space-y-6">
+            {/* Upcoming Events */}
+            <div className="bg-white rounded-card shadow-lg p-6">
+              <h3 className="text-xl font-bold text-primary mb-4">Upcoming Events</h3>
+              {upcomingEvents.length > 0 ? (
+                <div className="space-y-4">
+                  {upcomingEvents.map(event => {
+                    const eventDate = event.date.toDate ? event.date.toDate() : new Date(event.date);
+                    const userRSVP = getUserRSVP(event);
+                    
+                    return (
+                      <div key={event.id} className="bg-secondary-light/30 rounded-lg p-4 border-l-4 border-primary">
+                        <div className="flex gap-3 mb-3">
+                          <span className="text-2xl">{getEventTypeIcon(event.type)}</span>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-text-primary mb-1">{event.title}</h4>
+                            <p className="text-sm text-text-secondary mb-1">{formatDate(eventDate)}</p>
+                            {event.startTime && (
+                              <p className="text-sm text-text-secondary mb-1">
+                                {formatTime(event.startTime)} - {formatTime(event.endTime)}
+                              </p>
+                            )}
+                            {event.location && (
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm text-text-secondary">📍 {event.location}</p>
+                                <button
+                                  onClick={() => handleGetDirections(event)}
+                                  className="text-xs bg-accent-blue text-white px-2 py-1 rounded hover:bg-blue-600 transition-colors"
+                                >
+                                  🗺️ Directions
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {event.description && (
+                          <p className="text-sm text-text-secondary mb-3 line-clamp-2">
+                            {event.description}
+                          </p>
+                        )}
+                        
+                        {/* Export Options for Single Event */}
+                        <div className="mb-3 flex gap-2">
+                          <button
+                            onClick={() => handleExportSingleEvent(event, 'ical')}
+                            className="text-xs bg-accent-green text-white px-2 py-1 rounded hover:bg-green-600 transition-colors"
+                            title="Download iCal"
+                          >
+                            📱
+                          </button>
+                          <button
+                            onClick={() => handleExportSingleEvent(event, 'google')}
+                            className="text-xs bg-accent-blue text-white px-2 py-1 rounded hover:bg-blue-600 transition-colors"
+                            title="Add to Google Calendar"
+                          >
+                            🌐
+                          </button>
+                          <button
+                            onClick={() => handleExportSingleEvent(event, 'apple')}
+                            className="text-xs bg-accent-gold text-text-primary px-2 py-1 rounded hover:bg-yellow-500 transition-colors"
+                            title="Add to Apple Calendar"
+                          >
+                            🍎
+                          </button>
+                        </div>
+                        
+                        <div className="mb-3">
+                          {userRSVP ? (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-text-secondary">
+                                RSVP: {userRSVP.status.toUpperCase()}
+                              </span>
+                              <button 
+                                onClick={() => handleRemoveRSVP(event.id)}
+                                className="text-xs bg-accent-red text-white px-3 py-1 rounded hover:bg-red-600 transition-colors duration-200"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => handleRSVP(event.id, RSVP_STATUS.YES)}
+                                className="flex-1 bg-accent-green text-white px-3 py-2 rounded text-sm font-medium hover:bg-green-600 transition-colors duration-200"
+                              >
+                                Yes
+                              </button>
+                              <button 
+                                onClick={() => handleRSVP(event.id, RSVP_STATUS.MAYBE)}
+                                className="flex-1 bg-accent-gold text-text-primary px-3 py-2 rounded text-sm font-medium hover:bg-yellow-500 transition-colors duration-200"
+                              >
+                                Maybe
+                              </button>
+                              <button 
+                                onClick={() => handleRSVP(event.id, RSVP_STATUS.NO)}
+                                className="flex-1 bg-accent-red text-white px-3 py-2 rounded text-sm font-medium hover:bg-red-600 transition-colors duration-200"
+                              >
+                                No
+                              </button>
+                            </div>
                           )}
-                          {event.location && <p>📍 {event.location}</p>}
+                        </div>
+                        
+                        <div className="flex gap-4 text-xs text-text-secondary">
+                          <span>RSVPs: {event.rsvpCount || 0}</span>
+                          <span>Attended: {event.attendanceCount || 0}</span>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
-                <p>No events on this date.</p>
+                <p className="text-text-secondary text-center py-8">No upcoming events.</p>
               )}
             </div>
-          )}
+
+            {/* Selected Date Events */}
+            {selectedDate && (
+              <div className="bg-white rounded-card shadow-lg p-6">
+                <h3 className="text-xl font-bold text-primary mb-4">
+                  Events on {formatDate(selectedDate)}
+                </h3>
+                {getEventsForDate(selectedDate).length > 0 ? (
+                  <div className="space-y-3">
+                    {getEventsForDate(selectedDate).map(event => (
+                      <div key={event.id} className="bg-secondary-light/30 rounded-lg p-3">
+                        <div className="flex gap-3">
+                          <span className="text-xl">{getEventTypeIcon(event.type)}</span>
+                          <div>
+                            <h4 className="font-semibold text-text-primary text-sm">{event.title}</h4>
+                            {event.startTime && (
+                              <p className="text-xs text-text-secondary">
+                                {formatTime(event.startTime)} - {formatTime(event.endTime)}
+                              </p>
+                            )}
+                            {event.location && (
+                              <div className="flex items-center justify-between mt-1">
+                                <p className="text-xs text-text-secondary">📍 {event.location}</p>
+                                <button
+                                  onClick={() => handleGetDirections(event)}
+                                  className="text-xs bg-accent-blue text-white px-2 py-1 rounded hover:bg-blue-600 transition-colors"
+                                >
+                                  🗺️
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-text-secondary text-center py-4">No events on this date.</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <style jsx>{`
-        .calendar-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 2rem;
-        }
-
-        .calendar-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 2rem;
-          padding-bottom: 1rem;
-          border-bottom: 2px solid #eee;
-        }
-
-        .calendar-navigation {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-        }
-
-        .nav-btn {
-          padding: 0.5rem 1rem;
-          background: #f5f5f5;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: background-color 0.2s;
-        }
-
-        .nav-btn:hover {
-          background: #e0e0e0;
-        }
-
-        .current-month {
-          margin: 0;
-          color: #333;
-          font-size: 1.5rem;
-        }
-
-        .create-event-btn {
-          padding: 0.75rem 1.5rem;
-          background: #2196f3;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-weight: 600;
-        }
-
-        .create-event-btn:hover {
-          background: #1976d2;
-        }
-
-        .error-message {
-          background: #ffebee;
-          color: #c62828;
-          padding: 1rem;
-          border-radius: 4px;
-          margin-bottom: 1rem;
-        }
-
-        .login-message {
-          text-align: center;
-          padding: 3rem;
-          color: #666;
-          font-size: 1.1rem;
-        }
-
-        .create-event-form {
-          background: white;
-          padding: 2rem;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-          margin-bottom: 2rem;
-        }
-
-        .create-event-form h3 {
-          margin: 0 0 1rem 0;
-          color: #333;
-        }
-
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-          margin-bottom: 1rem;
-        }
-
-        .create-event-form input,
-        .create-event-form select,
-        .create-event-form textarea {
-          padding: 0.75rem;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-          font-family: inherit;
-          margin-bottom: 1rem;
-        }
-
-        .create-event-form button {
-          background: #2196f3;
-          color: white;
-          border: none;
-          padding: 0.75rem 2rem;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 1rem;
-          font-weight: 600;
-        }
-
-        .create-event-form button:hover {
-          background: #1976d2;
-        }
-
-        .calendar-content {
-          display: grid;
-          grid-template-columns: 2fr 1fr;
-          gap: 2rem;
-        }
-
-        .calendar-grid {
-          background: white;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .calendar-header-row {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          background: #f5f5f5;
-        }
-
-        .day-header {
-          padding: 1rem;
-          text-align: center;
-          font-weight: 600;
-          color: #666;
-          border-bottom: 1px solid #ddd;
-        }
-
-        .calendar-body {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-        }
-
-        .calendar-day {
-          min-height: 100px;
-          padding: 0.5rem;
-          border-bottom: 1px solid #eee;
-          border-right: 1px solid #eee;
-          cursor: pointer;
-          transition: background-color 0.2s;
-          position: relative;
-        }
-
-        .calendar-day:hover {
-          background: #f8f9fa;
-        }
-
-        .calendar-day.empty {
-          cursor: default;
-        }
-
-        .calendar-day.selected {
-          background: #e3f2fd;
-        }
-
-        .calendar-day.today {
-          background: #fff3e0;
-          border: 2px solid #ff9800;
-        }
-
-        .day-number {
-          font-weight: 600;
-          color: #333;
-          margin-bottom: 0.25rem;
-        }
-
-        .day-events {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.25rem;
-        }
-
-        .event-dot {
-          font-size: 0.75rem;
-          padding: 0.125rem;
-          border-radius: 2px;
-        }
-
-        .more-events {
-          font-size: 0.75rem;
-          color: #666;
-        }
-
-        .calendar-sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 2rem;
-        }
-
-        .upcoming-events,
-        .selected-date-events {
-          background: white;
-          padding: 1.5rem;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .upcoming-events h3,
-        .selected-date-events h3 {
-          margin: 0 0 1rem 0;
-          color: #333;
-        }
-
-        .events-list {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-
-        .event-card {
-          background: #f8f9fa;
-          padding: 1rem;
-          border-radius: 6px;
-          border-left: 4px solid #2196f3;
-        }
-
-        .event-header {
-          display: flex;
-          gap: 0.75rem;
-          margin-bottom: 0.5rem;
-        }
-
-        .event-icon {
-          font-size: 1.25rem;
-          flex-shrink: 0;
-        }
-
-        .event-info h4 {
-          margin: 0 0 0.25rem 0;
-          color: #333;
-        }
-
-        .event-info p {
-          margin: 0.125rem 0;
-          font-size: 0.875rem;
-          color: #666;
-        }
-
-        .event-description {
-          font-size: 0.875rem;
-          color: #666;
-          margin: 0.5rem 0;
-          line-height: 1.4;
-        }
-
-        .event-actions {
-          margin: 0.75rem 0;
-        }
-
-        .rsvp-buttons {
-          display: flex;
-          gap: 0.5rem;
-        }
-
-        .rsvp-btn {
-          padding: 0.25rem 0.75rem;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 0.875rem;
-          font-weight: 600;
-        }
-
-        .rsvp-btn.yes {
-          background: #4caf50;
-          color: white;
-        }
-
-        .rsvp-btn.maybe {
-          background: #ff9800;
-          color: white;
-        }
-
-        .rsvp-btn.no {
-          background: #f44336;
-          color: white;
-        }
-
-        .rsvp-status {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .remove-rsvp-btn {
-          padding: 0.25rem 0.5rem;
-          background: #f44336;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 0.875rem;
-        }
-
-        .event-stats {
-          font-size: 0.875rem;
-          color: #666;
-          display: flex;
-          gap: 1rem;
-        }
-
-        @media (max-width: 768px) {
-          .calendar-container {
-            padding: 1rem;
-          }
-
-          .calendar-header {
-            flex-direction: column;
-            gap: 1rem;
-            align-items: stretch;
-          }
-
-          .calendar-navigation {
-            justify-content: center;
-          }
-
-          .calendar-content {
-            grid-template-columns: 1fr;
-          }
-
-          .form-row {
-            grid-template-columns: 1fr;
-          }
-
-          .calendar-day {
-            min-height: 80px;
-          }
-
-          .rsvp-buttons {
-            flex-direction: column;
-          }
-        }
-      `}</style>
+      {/* Directions Modal */}
+      {showDirections && selectedEvent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-primary mb-4">Get Directions</h3>
+            <div className="mb-4">
+              <p className="text-text-secondary mb-2">Destination:</p>
+              <p className="font-medium">{selectedEvent.location}</p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-text-secondary mb-2">
+                Travel Mode:
+              </label>
+              <select
+                value={travelMode}
+                onChange={(e) => setTravelMode(e.target.value)}
+                className="w-full px-3 py-2 border border-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {getTravelModeOptions().map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.icon} {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={handleOpenDirections}
+                className="flex-1 bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark transition-colors"
+              >
+                🗺️ Get Directions
+              </button>
+              <button
+                onClick={() => setShowDirections(false)}
+                className="flex-1 bg-secondary text-text-primary px-4 py-2 rounded hover:bg-secondary-dark transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

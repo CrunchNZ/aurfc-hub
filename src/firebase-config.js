@@ -1,57 +1,85 @@
 // Firebase Configuration for AURFC Hub
-// This file contains the real Firebase configuration values
+// Supports development and production environments
 
-const firebaseConfig = {
-  // Development Environment (aurfc-dev-2e9f9)
-  dev: {
-    apiKey: "AIzaSyBbIxEEp_tVNs5RtcQH32P6rOTqSTqEWg8",
-    authDomain: "aurfc-dev-2e9f9.firebaseapp.com",
-    projectId: "aurfc-dev-2e9f9",
-    storageBucket: "aurfc-dev-2e9f9.firebasestorage.app",
-    messagingSenderId: "299799672333",
-    appId: "1:299799672333:web:257566c923c237650cc744",
-    measurementId: "G-CH793ZTC12"
-  },
+import { getFirebaseConfig } from './env.js';
+
+// Get environment-specific Firebase configuration
+export const firebaseConfig = getFirebaseConfig();
+
+// Firebase configuration validation
+export const validateFirebaseConfig = () => {
+  const requiredFields = [
+    'apiKey',
+    'authDomain', 
+    'projectId',
+    'storageBucket',
+    'messagingSenderId',
+    'appId'
+  ];
   
-  // Test Environment (aurfc-test)
-  test: {
-    apiKey: "your_test_api_key",
-    authDomain: "aurfc-test.firebaseapp.com",
-    projectId: "aurfc-test",
-    storageBucket: "aurfc-test.appspot.com",
-    messagingSenderId: "your_test_sender_id",
-    appId: "your_test_app_id",
-    measurementId: "your_test_measurement_id"
-  },
+  const missingFields = requiredFields.filter(field => !firebaseConfig[field]);
   
-  // Production Environment (aurfc-prod)
-  prod: {
-    apiKey: "your_prod_api_key",
-    authDomain: "aurfc-prod.firebaseapp.com",
-    projectId: "aurfc-prod",
-    storageBucket: "aurfc-prod.appspot.com",
-    messagingSenderId: "your_prod_sender_id",
-    appId: "your_prod_app_id",
-    measurementId: "your_prod_measurement_id"
+  if (missingFields.length > 0) {
+    console.error('Missing Firebase configuration fields:', missingFields);
+    return false;
+  }
+  
+  return true;
+};
+
+// Environment-specific Firebase settings
+export const firebaseSettings = {
+  development: {
+    enableEmulator: true,
+    enableDebug: true,
+    enableAnalytics: false,
+    enablePerformance: false,
+  },
+  production: {
+    enableEmulator: false,
+    enableDebug: false,
+    enableAnalytics: true,
+    enablePerformance: true,
   }
 };
 
-// Get current environment
-const getCurrentEnvironment = () => {
-  const hostname = window.location.hostname;
-  if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-    return 'dev';
-  } else if (hostname.includes('test') || hostname.includes('staging')) {
-    return 'test';
-  } else {
-    return 'prod';
-  }
+// Get current environment settings
+export const getFirebaseSettings = () => {
+  const isDevelopment = import.meta.env.DEV;
+  return isDevelopment ? firebaseSettings.development : firebaseSettings.production;
 };
 
-// Export the configuration for the current environment
-export const getFirebaseConfig = () => {
-  const env = getCurrentEnvironment();
-  return firebaseConfig[env] || firebaseConfig.dev;
+// Firebase initialization options
+export const firebaseInitOptions = {
+  // Performance monitoring
+  performance: {
+    enable: getFirebaseSettings().enablePerformance,
+    dataCollectionEnabled: getFirebaseSettings().enablePerformance,
+  },
+  
+  // Analytics
+  analytics: {
+    enable: getFirebaseSettings().enableAnalytics,
+    measurementId: firebaseConfig.measurementId,
+  },
+  
+  // Storage
+  storage: {
+    enable: true,
+    bucket: firebaseConfig.storageBucket,
+  },
+  
+  // Firestore
+  firestore: {
+    enable: true,
+    projectId: firebaseConfig.projectId,
+  },
+  
+  // Authentication
+  auth: {
+    enable: true,
+    domain: firebaseConfig.authDomain,
+  }
 };
 
 export default firebaseConfig;

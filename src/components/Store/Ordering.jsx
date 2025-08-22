@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import './Ordering.css';
+
 
 const Ordering = ({ addToCart, user, cart }) => {
   const { user: authUser } = useAuth();

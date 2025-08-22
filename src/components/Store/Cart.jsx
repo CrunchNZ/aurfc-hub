@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import CheckoutForm from './CheckoutForm';
-import './Cart.css';
+
 
 const Cart = ({ 
   cart, 

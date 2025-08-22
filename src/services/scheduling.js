@@ -16,7 +16,7 @@ import {
   onSnapshot,
   limit
 } from 'firebase/firestore';
-import { notifyNewEvent } from './announcements';
+import { notifyNewEvent } from './notifications';
 
 // Scheduling Service for AURFC Hub
 // Handles events, calendar, RSVP, and attendance tracking
@@ -24,11 +24,8 @@ import { notifyNewEvent } from './announcements';
 // Event types
 export const EVENT_TYPES = {
   TRAINING: 'training',
-  MATCH: 'match',
-  MEETING: 'meeting',
-  SOCIAL: 'social',
-  FUNDRAISING: 'fundraising',
-  TOURNAMENT: 'tournament'
+  GAME: 'game',
+  EVENT: 'event'
 };
 
 // Event status
@@ -69,14 +66,19 @@ export const createEvent = async (eventData, creatorUser) => {
     
     const docRef = await addDoc(collection(db, 'events'), event);
     
-    // Send notification about new event
+    // Send notification about new event (don't fail if notification fails)
     if (event.sendNotification !== false) {
-      await notifyNewEvent({
-        id: docRef.id,
-        title: event.title,
-        date: event.date,
-        type: event.type
-      }, event.targetRoles || ['all']);
+      try {
+        await notifyNewEvent({
+          id: docRef.id,
+          title: event.title,
+          date: event.date,
+          type: event.type
+        }, event.targetRoles || ['all']);
+      } catch (notificationError) {
+        console.warn('Failed to send notification for new event:', notificationError);
+        // Don't fail the event creation if notification fails
+      }
     }
     
     return { id: docRef.id, ...event };
@@ -442,7 +444,7 @@ export const createMatchEvent = async (matchData, creatorUser) => {
   const event = {
     title: `${matchData.homeTeam} vs ${matchData.awayTeam}`,
     description: matchData.description || '',
-    type: EVENT_TYPES.MATCH,
+            type: EVENT_TYPES.GAME,
     date: matchData.date,
     startTime: matchData.startTime,
     endTime: matchData.endTime,

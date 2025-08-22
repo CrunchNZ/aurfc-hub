@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-import './index.css'; // Optional: Add global styles if needed
+import './index.css'; // Re-enabled to restore component styling
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

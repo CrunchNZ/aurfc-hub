@@ -55,15 +55,23 @@ export const usersService = {
   // Get user by ID
   async getUser(userId) {
     try {
+      console.log('Database: Getting user with ID:', userId);
       const userRef = doc(db, 'users', userId);
+      console.log('Database: User reference created');
+      
       const userSnap = await getDoc(userRef);
+      console.log('Database: User snapshot retrieved, exists:', userSnap.exists());
       
       if (userSnap.exists()) {
-        return { id: userSnap.id, ...userSnap.data() };
+        const userData = { id: userSnap.id, ...userSnap.data() };
+        console.log('Database: User data:', userData);
+        return userData;
       }
+      
+      console.log('Database: User document does not exist');
       return null;
     } catch (error) {
-      console.error('Error getting user:', error);
+      console.error('Database: Error getting user:', error);
       throw error;
     }
   },
@@ -146,6 +154,54 @@ export const usersService = {
       return users;
     } catch (error) {
       console.error('Error searching users:', error);
+      throw error;
+    }
+  },
+
+  // Get all users
+  async getAllUsers() {
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (error) {
+      console.error('Error getting all users:', error);
+      throw error;
+    }
+  },
+
+  // Update user role
+  async updateUserRole(userId, newRole) {
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        role: newRole,
+        updatedAt: serverTimestamp()
+      });
+      return { id: userId, role: newRole };
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      throw error;
+    }
+  },
+
+  // Delete user (soft delete)
+  async deleteUser(userId) {
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        isActive: false,
+        deletedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      return { id: userId, isActive: false };
+    } catch (error) {
+      console.error('Error deleting user:', error);
       throw error;
     }
   }

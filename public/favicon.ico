@@ -1,0 +1,67 @@
+<svg width="200" height="240" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield background -->
+  <defs>
+    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#003366;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#004080;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main shield shape -->
+  <path d="M100 20 L180 60 L180 200 L100 240 L20 200 L20 60 Z" 
+        fill="url(#shieldGradient)" 
+        stroke="#003366" 
+        stroke-width="3"/>
+  
+  <!-- Top section - AURFC text -->
+  <rect x="30" y="30" width="140" height="50" fill="white" rx="5"/>
+  <text x="100" y="60" font-family="serif" font-size="24" font-weight="bold" 
+        text-anchor="middle" fill="#003366">AURFC</text>
+  
+  <!-- Middle section - Kiwi birds and landscape -->
+  <rect x="30" y="90" width="140" height="70" fill="white" rx="5"/>
+  
+  <!-- Kiwi birds -->
+  <g fill="#003366">
+    <!-- Left kiwi -->
+    <ellipse cx="50" cy="110" rx="8" ry="12"/>
+    <ellipse cx="45" cy="105" rx="3" ry="4" fill="white"/>
+    <path d="M42 108 L38 112 L42 116" stroke="#003366" stroke-width="2" fill="none"/>
+    
+    <!-- Center kiwi -->
+    <ellipse cx="100" cy="110" rx="8" ry="12"/>
+    <ellipse cx="95" cy="105" rx="3" ry="4" fill="white"/>
+    <path d="M92 108 L88 112 L92 116" stroke="#003366" stroke-width="2" fill="none"/>
+    
+    <!-- Right kiwi -->
+    <ellipse cx="150" cy="110" rx="8" ry="12"/>
+    <ellipse cx="145" cy="105" rx="3" ry="4" fill="white"/>
+    <path d="M142 108 L138 112 L142 116" stroke="#003366" stroke-width="2" fill="none"/>
+  </g>
+  
+  <!-- Wavy landscape line -->
+  <path d="M35 140 Q50 135 65 140 Q80 145 95 140 Q110 135 125 140 Q140 145 155 140 Q170 135 185 140" 
+        stroke="#003366" stroke-width="3" fill="none"/>
+  
+  <!-- Bottom section - Academic elements -->
+  <rect x="30" y="170" width="140" height="50" fill="white" rx="5"/>
+  
+  <!-- Stars -->
+  <g fill="#003366">
+    <!-- Left star -->
+    <path d="M50 180 L52 185 L57 185 L53 188 L55 193 L50 190 L45 193 L47 188 L43 185 L48 185 Z"/>
+    <!-- Right star -->
+    <path d="M150 180 L152 185 L157 185 L153 188 L155 193 L150 190 L145 193 L147 188 L143 185 L148 185 Z"/>
+    <!-- Bottom star -->
+    <path d="M100 200 L102 205 L107 205 L103 208 L105 213 L100 210 L95 213 L97 208 L93 205 L98 205 Z"/>
+  </g>
+  
+  <!-- Open book -->
+  <g fill="#003366">
+    <rect x="85" y="185" width="30" height="25" rx="2"/>
+    <rect x="87" y="187" width="26" height="21" fill="white"/>
+    <line x1="100" y1="187" x2="100" y2="208" stroke="#003366" stroke-width="1"/>
+    <line x1="87" y1="195" x2="113" y2="195" stroke="#003366" stroke-width="0.5"/>
+    <line x1="87" y1="200" x2="113" y2="200" stroke="#003366" stroke-width="0.5"/>
+  </g>
+</svg>

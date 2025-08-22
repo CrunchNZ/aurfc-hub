@@ -1,411 +1,243 @@
+// Team Management Service for AURFC Hub
+// Handles team creation, updates, and management
+
 import { db } from '../firebase';
 import { 
   doc, 
-  setDoc, 
-  updateDoc, 
   getDoc, 
   getDocs,
-  addDoc,
+  setDoc, 
+  updateDoc, 
+  deleteDoc,
   collection,
   query,
-  where,
   orderBy,
-  serverTimestamp,
-  arrayUnion,
-  arrayRemove,
-  onSnapshot
+  serverTimestamp
 } from 'firebase/firestore';
-import { notifyTeamUpdate } from './notifications';
-
-// Team Management Service for AURFC Hub
-// Handles team rosters, performance tracking, and drills
 
 // ============================================================================
-// TEAM ROSTER MANAGEMENT
+// TEAM MANAGEMENT
 // ============================================================================
 
-// Create a new team
-export const createTeam = async (teamData, creatorUser) => {
+/**
+ * Create a new team
+ * @param {Object} teamData - Team data
+ * @returns {Promise<Object>} Created team data
+ */
+export const createTeam = async (teamData) => {
   try {
-    const team = {
-      ...teamData,
-      createdBy: creatorUser.uid,
-      createdByName: creatorUser.displayName || 'Unknown',
+    const teamId = `team-${Date.now()}`;
+    const teamDoc = {
+      id: teamId,
+      name: teamData.name,
+      ageGroup: teamData.ageGroup,
+      type: teamData.type, // 'Rippa', 'Open', 'Restricted'
+      description: teamData.description || '',
+      maxPlayers: teamData.maxPlayers || 15,
+      active: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      isActive: true,
-      players: [],
-      coaches: [creatorUser.uid],
-      season: teamData.season || new Date().getFullYear(),
-      stats: {
-        matchesPlayed: 0,
-        matchesWon: 0,
-        matchesLost: 0,
-        matchesDrawn: 0,
-        pointsFor: 0,
-        pointsAgainst: 0
-      }
+      createdBy: teamData.createdBy
     };
-    
-    const docRef = await addDoc(collection(db, 'teams'), team);
-    
-    // Send notification about new team
-    await notifyTeamUpdate(
-      docRef.id,
-      team.name,
-      'team_created',
-      `New team "${team.name}" has been created.`,
-      ['coach', 'admin']
-    );
-    
-    return { id: docRef.id, ...team };
+
+    await setDoc(doc(db, 'teams', teamId), teamDoc);
+    return { ...teamDoc, id: teamId };
   } catch (error) {
     console.error('Error creating team:', error);
-    throw error;
+    throw new Error('Failed to create team: ' + error.message);
   }
 };
 
-// Get team by ID
-export const getTeam = async (teamId) => {
+/**
+ * Get all teams
+ * @returns {Promise<Array>} Array of team objects
+ */
+export const getAllTeams = async () => {
   try {
-    const teamRef = doc(db, 'teams', teamId);
-    const teamSnap = await getDoc(teamRef);
+    const teamsQuery = query(
+      collection(db, 'teams'),
+      orderBy('ageGroup', 'asc')
+    );
     
-    if (teamSnap.exists()) {
-      return { id: teamSnap.id, ...teamSnap.data() };
+    const querySnapshot = await getDocs(teamsQuery);
+    const teams = [];
+    
+    querySnapshot.forEach((doc) => {
+      teams.push({ id: doc.id, ...doc.data() });
+    });
+    
+    return teams;
+  } catch (error) {
+    console.error('Error getting teams:', error);
+    throw new Error('Failed to get teams: ' + error.message);
+  }
+};
+
+/**
+ * Get team by ID
+ * @param {string} teamId - Team ID
+ * @returns {Promise<Object|null>} Team data or null
+ */
+export const getTeamById = async (teamId) => {
+  try {
+    const teamDoc = await getDoc(doc(db, 'teams', teamId));
+    
+    if (teamDoc.exists()) {
+      return { id: teamDoc.id, ...teamDoc.data() };
     }
+    
     return null;
   } catch (error) {
     console.error('Error getting team:', error);
-    throw error;
+    throw new Error('Failed to get team: ' + error.message);
   }
 };
 
-// Get all teams
-export const getTeams = (callback, filters = {}) => {
-  try {
-    let q = query(collection(db, 'teams'));
-    
-    if (filters.isActive !== undefined) {
-      q = query(q, where('isActive', '==', filters.isActive));
-    }
-    
-    if (filters.season) {
-      q = query(q, where('season', '==', filters.season));
-    }
-    
-    if (filters.ageGroup) {
-      q = query(q, where('ageGroup', '==', filters.ageGroup));
-    }
-    
-    q = query(q, orderBy('name', 'asc'));
-    
-    return onSnapshot(q, (snapshot) => {
-      const teams = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      callback(teams);
-    });
-  } catch (error) {
-    console.error('Error getting teams:', error);
-    throw error;
-  }
-};
-
-// Add player to team roster
-export const addPlayerToTeam = async (teamId, playerId, playerData) => {
+/**
+ * Update team
+ * @param {string} teamId - Team ID
+ * @param {Object} updates - Updates to apply
+ * @returns {Promise<Object>} Updated team data
+ */
+export const updateTeam = async (teamId, updates) => {
   try {
     const teamRef = doc(db, 'teams', teamId);
-    const team = await getDoc(teamRef);
     
-    if (team.exists()) {
-      const currentPlayers = team.data().players || [];
-      
-      // Check if player is already in the team
-      if (currentPlayers.some(p => p.userId === playerId)) {
-        throw new Error('Player is already in this team');
-      }
-      
-      const playerInfo = {
-        userId: playerId,
-        name: playerData.name,
-        position: playerData.position || 'Forward',
-        jerseyNumber: playerData.jerseyNumber,
-        joinedAt: serverTimestamp(),
-        isActive: true,
-        stats: {
-          matchesPlayed: 0,
-          tries: 0,
-          conversions: 0,
-          penalties: 0,
-          yellowCards: 0,
-          redCards: 0
-        }
-      };
-      
-      await updateDoc(teamRef, {
-        players: arrayUnion(playerInfo),
-        updatedAt: serverTimestamp()
-      });
-      
-      // Send notification
-      await notifyTeamUpdate(
-        teamId,
-        team.data().name,
-        'player_added',
-        `${playerData.name} has been added to the team.`,
-        ['coach', 'player']
-      );
-      
-      return playerInfo;
-    } else {
-      throw new Error('Team not found');
-    }
-  } catch (error) {
-    console.error('Error adding player to team:', error);
-    throw error;
-  }
-};
-
-// Remove player from team roster
-export const removePlayerFromTeam = async (teamId, playerId) => {
-  try {
-    const teamRef = doc(db, 'teams', teamId);
-    const team = await getDoc(teamRef);
-    
-    if (team.exists()) {
-      const currentPlayers = team.data().players || [];
-      const playerToRemove = currentPlayers.find(p => p.userId === playerId);
-      
-      if (playerToRemove) {
-        await updateDoc(teamRef, {
-          players: arrayRemove(playerToRemove),
-          updatedAt: serverTimestamp()
-        });
-        
-        // Send notification
-        await notifyTeamUpdate(
-          teamId,
-          team.data().name,
-          'player_removed',
-          `${playerToRemove.name} has been removed from the team.`,
-          ['coach']
-        );
-      }
-    }
-  } catch (error) {
-    console.error('Error removing player from team:', error);
-    throw error;
-  }
-};
-
-// Update player in team
-export const updatePlayerInTeam = async (teamId, playerId, updates) => {
-  try {
-    const teamRef = doc(db, 'teams', teamId);
-    const team = await getDoc(teamRef);
-    
-    if (team.exists()) {
-      const currentPlayers = team.data().players || [];
-      const updatedPlayers = currentPlayers.map(player => {
-        if (player.userId === playerId) {
-          return { ...player, ...updates, updatedAt: serverTimestamp() };
-        }
-        return player;
-      });
-      
-      await updateDoc(teamRef, {
-        players: updatedPlayers,
-        updatedAt: serverTimestamp()
-      });
-      
-      return updatedPlayers.find(p => p.userId === playerId);
-    }
-  } catch (error) {
-    console.error('Error updating player in team:', error);
-    throw error;
-  }
-};
-
-// ============================================================================
-// PERFORMANCE TRACKING
-// ============================================================================
-
-// Create or update player performance
-export const trackPlayerPerformance = async (playerId, matchId, performanceData) => {
-  try {
-    const performance = {
-      playerId,
-      matchId,
-      ...performanceData,
-      recordedAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-    
-    const docRef = await addDoc(collection(db, 'performances'), performance);
-    return { id: docRef.id, ...performance };
-  } catch (error) {
-    console.error('Error tracking player performance:', error);
-    throw error;
-  }
-};
-
-// Get player performances
-export const getPlayerPerformances = async (playerId, options = {}) => {
-  try {
-    let q = query(
-      collection(db, 'performances'),
-      where('playerId', '==', playerId)
-    );
-    
-    if (options.matchId) {
-      q = query(q, where('matchId', '==', options.matchId));
-    }
-    
-    if (options.season) {
-      q = query(q, where('season', '==', options.season));
-    }
-    
-    q = query(q, orderBy('recordedAt', 'desc'));
-    
-    if (options.limit) {
-      q = query(q, limit(options.limit));
-    }
-    
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-  } catch (error) {
-    console.error('Error getting player performances:', error);
-    throw error;
-  }
-};
-
-// Get team performance summary
-export const getTeamPerformanceSummary = async (teamId, season) => {
-  try {
-    const team = await getTeam(teamId);
-    if (!team) return null;
-    
-    const performances = [];
-    for (const player of team.players) {
-      const playerPerfs = await getPlayerPerformances(player.userId, { season });
-      performances.push(...playerPerfs);
-    }
-    
-    // Calculate team statistics
-    const summary = {
-      totalMatches: new Set(performances.map(p => p.matchId)).size,
-      totalTries: performances.reduce((sum, p) => sum + (p.tries || 0), 0),
-      totalConversions: performances.reduce((sum, p) => sum + (p.conversions || 0), 0),
-      totalPenalties: performances.reduce((sum, p) => sum + (p.penalties || 0), 0),
-      totalPoints: 0,
-      averagePerformance: 0
-    };
-    
-    summary.totalPoints = (summary.totalTries * 5) + (summary.totalConversions * 2) + (summary.totalPenalties * 3);
-    summary.averagePerformance = summary.totalMatches > 0 ? summary.totalPoints / summary.totalMatches : 0;
-    
-    return summary;
-  } catch (error) {
-    console.error('Error getting team performance summary:', error);
-    throw error;
-  }
-};
-
-// ============================================================================
-// DRILLS AND TRAINING
-// ============================================================================
-
-// Create a new drill
-export const createDrill = async (drillData, creatorUser) => {
-  try {
-    const drill = {
-      ...drillData,
-      createdBy: creatorUser.uid,
-      createdByName: creatorUser.displayName || 'Unknown',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      isActive: true,
-      category: drillData.category || 'general',
-      difficulty: drillData.difficulty || 'intermediate',
-      equipment: drillData.equipment || [],
-      tags: drillData.tags || []
-    };
-    
-    const docRef = await addDoc(collection(db, 'drills'), drill);
-    return { id: docRef.id, ...drill };
-  } catch (error) {
-    console.error('Error creating drill:', error);
-    throw error;
-  }
-};
-
-// Get drills with filtering
-export const getDrills = (callback, filters = {}) => {
-  try {
-    let q = query(collection(db, 'drills'));
-    
-    if (filters.isActive !== undefined) {
-      q = query(q, where('isActive', '==', filters.isActive));
-    }
-    
-    if (filters.category) {
-      q = query(q, where('category', '==', filters.category));
-    }
-    
-    if (filters.difficulty) {
-      q = query(q, where('difficulty', '==', filters.difficulty));
-    }
-    
-    q = query(q, orderBy('name', 'asc'));
-    
-    return onSnapshot(q, (snapshot) => {
-      const drills = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      callback(drills);
-    });
-  } catch (error) {
-    console.error('Error getting drills:', error);
-    throw error;
-  }
-};
-
-// Update drill
-export const updateDrill = async (drillId, updates) => {
-  try {
-    const drillRef = doc(db, 'drills', drillId);
-    await updateDoc(drillRef, {
+    await updateDoc(teamRef, {
       ...updates,
       updatedAt: serverTimestamp()
     });
     
-    return { id: drillId, ...updates };
+    return await getTeamById(teamId);
   } catch (error) {
-    console.error('Error updating drill:', error);
-    throw error;
+    console.error('Error updating team:', error);
+    throw new Error('Failed to update team: ' + error.message);
   }
 };
 
-// Delete drill (soft delete)
-export const deleteDrill = async (drillId) => {
+/**
+ * Delete team
+ * @param {string} teamId - Team ID
+ * @returns {Promise<void>}
+ */
+export const deleteTeam = async (teamId) => {
   try {
-    const drillRef = doc(db, 'drills', drillId);
-    await updateDoc(drillRef, {
-      isActive: false,
-      deletedAt: serverTimestamp()
-    });
+    await deleteDoc(doc(db, 'teams', teamId));
   } catch (error) {
-    console.error('Error deleting drill:', error);
-    throw error;
+    console.error('Error deleting team:', error);
+    throw new Error('Failed to delete team: ' + error.message);
   }
 };
 
-// Legacy functions for backward compatibility
-export const createRoster = createTeam;
-export const trackPerformance = trackPlayerPerformance; 
+/**
+ * Toggle team active status
+ * @param {string} teamId - Team ID
+ * @returns {Promise<Object>} Updated team data
+ */
+export const toggleTeamStatus = async (teamId, newStatus) => {
+  try {
+    const team = await getTeamById(teamId);
+    if (!team) {
+      throw new Error('Team not found');
+    }
+    
+    return await updateTeam(teamId, { active: newStatus });
+  } catch (error) {
+    console.error('Error toggling team status:', error);
+    throw new Error('Failed to toggle team status: ' + error.message);
+  }
+};
+
+// ============================================================================
+// TEAM UTILITIES
+// ============================================================================
+
+/**
+ * Get teams by age group
+ * @param {string} ageGroup - Age group filter
+ * @returns {Promise<Array>} Array of teams for the age group
+ */
+export const getTeamsByAgeGroup = async (ageGroup) => {
+  try {
+    const teams = await getAllTeams();
+    return teams.filter(team => team.ageGroup === ageGroup && team.active);
+  } catch (error) {
+    console.error('Error getting teams by age group:', error);
+    throw new Error('Failed to get teams by age group: ' + error.message);
+  }
+};
+
+/**
+ * Get active teams only
+ * @returns {Promise<Array>} Array of active teams
+ */
+export const getActiveTeams = async () => {
+  try {
+    const teams = await getAllTeams();
+    return teams.filter(team => team.active);
+  } catch (error) {
+    console.error('Error getting active teams:', error);
+    throw new Error('Failed to get active teams: ' + error.message);
+  }
+};
+
+/**
+ * Get teams formatted for dropdown
+ * @returns {Promise<Array>} Array of teams formatted for select dropdown
+ */
+export const getTeamsForDropdown = async () => {
+  try {
+    const teams = await getActiveTeams();
+    return teams.map(team => ({
+      value: team.id,
+      label: team.name,
+      ageGroup: team.ageGroup,
+      type: team.type
+    }));
+  } catch (error) {
+    console.error('Error getting teams for dropdown:', error);
+    throw new Error('Failed to get teams for dropdown: ' + error.message);
+  }
+};
+
+/**
+ * Populate initial teams with preset rugby teams
+ * @returns {Promise<Array>} Array of created team IDs
+ */
+export const populateInitialTeams = async () => {
+  try {
+    const initialTeams = [
+      { name: "Under 6 Rippa", ageGroup: "Under 6", type: "Rippa", description: "Rippa rugby for players under 6 years old", maxPlayers: 12 },
+      { name: "Under 7 Rippa", ageGroup: "Under 7", type: "Rippa", description: "Rippa rugby for players under 7 years old", maxPlayers: 12 },
+      { name: "Under 8 Open", ageGroup: "Under 8", type: "Open", description: "Open rugby for players under 8 years old", maxPlayers: 15 },
+      { name: "Under 8 Restricted", ageGroup: "Under 8", type: "Restricted", description: "Restricted rugby for players under 8 years old", maxPlayers: 15 },
+      { name: "Under 9 Open", ageGroup: "Under 9", type: "Open", description: "Open rugby for players under 9 years old", maxPlayers: 15 },
+      { name: "Under 9 Restricted", ageGroup: "Under 9", type: "Restricted", description: "Restricted rugby for players under 9 years old", maxPlayers: 15 },
+      { name: "Under 10 Open", ageGroup: "Under 10", type: "Open", description: "Open rugby for players under 10 years old", maxPlayers: 15 },
+      { name: "Under 10 Restricted", ageGroup: "Under 10", type: "Restricted", description: "Restricted rugby for players under 10 years old", maxPlayers: 15 },
+      { name: "Under 11 Open", ageGroup: "Under 11", type: "Open", description: "Open rugby for players under 11 years old", maxPlayers: 15 },
+      { name: "Under 11 Restricted", ageGroup: "Under 11", type: "Restricted", description: "Restricted rugby for players under 11 years old", maxPlayers: 15 },
+      { name: "Under 12 Open", ageGroup: "Under 12", type: "Open", description: "Open rugby for players under 12 years old", maxPlayers: 15 },
+      { name: "Under 12 Restricted", ageGroup: "Under 12", type: "Restricted", description: "Restricted rugby for players under 12 years old", maxPlayers: 15 },
+      { name: "Under 13 Open", ageGroup: "Under 13", type: "Open", description: "Open rugby for players under 13 years old", maxPlayers: 15 },
+      { name: "Under 13 Restricted", ageGroup: "Under 13", type: "Restricted", description: "Restricted rugby for players under 13 years old", maxPlayers: 15 }
+    ];
+    
+    const createdTeamIds = [];
+    
+    for (const team of initialTeams) {
+      try {
+        const createdTeam = await createTeam(team);
+        createdTeamIds.push(createdTeam.id);
+        console.log(`✅ Created team: ${team.name}`);
+      } catch (error) {
+        console.error(`❌ Failed to create team ${team.name}:`, error);
+      }
+    }
+    
+    return createdTeamIds;
+  } catch (error) {
+    console.error('Error populating initial teams:', error);
+    throw new Error('Failed to populate initial teams: ' + error.message);
+  }
+}; 

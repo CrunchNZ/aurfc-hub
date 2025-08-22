@@ -69,6 +69,14 @@
         { "fieldPath": "status", "mode": "ASCENDING" },
         { "fieldPath": "startTime", "mode": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "mode": "ASCENDING" },
+        { "fieldPath": "__name__", "mode": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -1,0 +1,67 @@
+<svg width="400" height="480" viewBox="0 0 400 480" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield background with proper proportions -->
+  <defs>
+    <linearGradient id="shieldGradientHD" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#003366;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#004080;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main shield shape - more accurate proportions -->
+  <path d="M200 30 L350 100 L350 380 L200 450 L50 380 L50 100 Z" 
+        fill="url(#shieldGradientHD)" 
+        stroke="#003366" 
+        stroke-width="4"/>
+  
+  <!-- Top section - AURFC text panel -->
+  <rect x="60" y="50" width="280" height="90" fill="white" rx="6" stroke="#003366" stroke-width="2"/>
+  <text x="200" y="104" font-family="Georgia, serif" font-size="44" font-weight="bold" 
+        text-anchor="middle" fill="#003366" letter-spacing="2">AURFC</text>
+  
+  <!-- Middle section - Kiwi birds and landscape -->
+  <rect x="60" y="160" width="280" height="130" fill="white" rx="6" stroke="#003366" stroke-width="2"/>
+  
+  <!-- Kiwi birds - more accurate silhouettes -->
+  <g fill="#003366">
+    <!-- Left kiwi -->
+    <ellipse cx="100" cy="200" rx="12" ry="20"/>
+    <ellipse cx="94" cy="192" rx="4" ry="6" fill="white"/>
+    <path d="M88 196 L80 204 L88 212" stroke="#003366" stroke-width="3" fill="none"/>
+    
+    <!-- Center kiwi -->
+    <ellipse cx="200" cy="200" rx="12" ry="20"/>
+    <ellipse cx="194" cy="192" rx="4" ry="6" fill="white"/>
+    <path d="M188 196 L180 204 L188 212" stroke="#003366" stroke-width="3" fill="none"/>
+    
+    <!-- Right kiwi -->
+    <ellipse cx="300" cy="200" rx="12" ry="20"/>
+    <ellipse cx="294" cy="192" rx="4" ry="6" fill="white"/>
+    <path d="M288 196 L280 204 L288 212" stroke="#003366" stroke-width="3" fill="none"/>
+  </g>
+  
+  <!-- Wavy landscape line - more natural curve -->
+  <path d="M70 270 Q100 260 130 270 Q160 280 190 270 Q220 260 250 270 Q280 280 310 270 Q340 260 370 270" 
+        stroke="#003366" stroke-width="5" fill="none"/>
+  
+  <!-- Bottom section - Academic elements -->
+  <rect x="60" y="310" width="280" height="100" fill="white" rx="6" stroke="#003366" stroke-width="2"/>
+  
+  <!-- Stars - more accurate five-pointed stars -->
+  <g fill="#003366">
+    <!-- Left star -->
+    <path d="M100 330 L104 340 L114 340 L107 346 L110 356 L100 350 L90 356 L93 346 L86 340 L96 340 Z"/>
+    <!-- Right star -->
+    <path d="M300 330 L304 340 L314 340 L307 346 L310 356 L300 350 L290 356 L293 346 L286 340 L296 340 Z"/>
+    <!-- Bottom star -->
+    <path d="M200 370 L204 380 L214 380 L207 386 L210 396 L200 390 L190 396 L193 386 L186 380 L196 380 Z"/>
+  </g>
+  
+  <!-- Open book - more detailed -->
+  <g fill="#003366">
+    <rect x="170" y="340" width="60" height="50" rx="4"/>
+    <rect x="174" y="344" width="52" height="42" fill="white"/>
+    <line x1="200" y1="344" x2="200" y2="386" stroke="#003366" stroke-width="2"/>
+    <line x1="174" y1="356" x2="226" y2="356" stroke="#003366" stroke-width="1.6"/>
+    <line x1="174" y1="366" x2="226" y2="366" stroke="#003366" stroke-width="1.6"/>
+  </g>
+</svg>

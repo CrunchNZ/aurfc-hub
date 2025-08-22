@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import './Fundraising.css';
+
 
 const Fundraising = ({ addToCart, user, cart }) => {
   const { user: authUser } = useAuth();
