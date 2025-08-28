@@ -1,27 +1,13 @@
 {
-  // Example:
-  //
-  // "indexes": [
-  //   {
-  //     "collectionGroup": "widgets",
-  //     "queryScope": "COLLECTION",
-  //     "fields": [
-  //       { "fieldPath": "foo", "arrayConfig": "CONTAINS" },
-  //       { "fieldPath": "bar", "mode": "DESCENDING" }
-  //     ]
-  //   },
-  //
-  //  "fieldOverrides": [
-  //    {
-  //      "collectionGroup": "widgets",
-  //      "fieldPath": "baz",
-  //      "indexes": [
-  //        { "order": "ASCENDING", "queryScope": "COLLECTION" }
-  //      ]
-  //    },
-  //   ]
-  // ]
   "indexes": [
+    {
+      "collectionGroup": "teamLineups",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "matchDate", "order": "DESCENDING" }
+      ]
+    },
     {
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
@@ -71,11 +57,19 @@
       ]
     },
     {
-      "collectionGroup": "events",
+      "collectionGroup": "attendance",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "date", "mode": "ASCENDING" },
-        { "fieldPath": "__name__", "mode": "ASCENDING" }
+        { "fieldPath": "teamId", "mode": "ASCENDING" },
+        { "fieldPath": "eventDate", "mode": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamId", "mode": "ASCENDING" },
+        { "fieldPath": "date", "mode": "DESCENDING" }
       ]
     }
   ],

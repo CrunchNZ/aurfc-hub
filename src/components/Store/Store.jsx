@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../../contexts/AuthContext';
 import StoreNavigation from './StoreNavigation';
 import Merchandise from './Merchandise';
 import RegistrationPayments from './RegistrationPayments';
@@ -12,7 +11,6 @@ import Cart from './Cart';
 import { ShoppingCart, Store as StoreIcon, CreditCard, Users, Calendar, Gift, Coffee } from 'lucide-react';
 
 const Store = () => {
-  const { user } = useAuth();
   const [activeSection, setActiveSection] = useState('merchandise');
   const [cart, setCart] = useState([]);
   const [showCart, setShowCart] = useState(false);
@@ -83,7 +81,6 @@ const Store = () => {
   const renderActiveSection = () => {
     const commonProps = {
       addToCart,
-      user,
       cart
     };
 
@@ -104,28 +101,6 @@ const Store = () => {
         return <Merchandise {...commonProps} />;
     }
   };
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background p-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-2xl mx-auto text-center"
-        >
-          <div className="card-primary">
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-white/20 rounded-full mb-6">
-                <StoreIcon size={40} className="text-white" />
-              </div>
-              <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
-              <p className="text-white/80">Please log in to access the AURFC Store.</p>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background p-6">

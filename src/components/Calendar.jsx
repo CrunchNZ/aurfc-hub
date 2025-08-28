@@ -70,51 +70,74 @@ function Calendar() {
       setLoading(true);
       setError(''); // Clear any previous errors
       
+      let unsubscribeMonthEvents = null;
+      let unsubscribeUpcoming = null;
+      
       // Add timeout to prevent infinite loading
       const loadingTimeout = setTimeout(() => {
         setLoading(false);
         setError('Loading timeout - please refresh the page');
-      }, 10000); // 10 second timeout
+      }, 15000); // Increased to 15 seconds
       
-      try {
-        // Get events for current month
-        const unsubscribeMonthEvents = getEventsForMonth(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          (monthEvents) => {
-            setEvents(monthEvents);
-            setLoading(false);
-            clearTimeout(loadingTimeout);
-          },
-          userRole
-        );
+      const loadEvents = async () => {
+        try {
+          console.log('Loading calendar events for user:', user.uid, 'role:', userRole);
+          
+          // Get events for current month
+          unsubscribeMonthEvents = getEventsForMonth(
+            currentDate.getFullYear(),
+            currentDate.getMonth(),
+            (monthEvents) => {
+              console.log('Month events loaded:', monthEvents.length);
+              setEvents(monthEvents);
+              setLoading(false);
+              clearTimeout(loadingTimeout);
+            },
+            userRole
+          );
 
-        // Get upcoming events
-        const unsubscribeUpcoming = getUpcomingEvents(
-          (upcoming) => {
-            setUpcomingEvents(upcoming);
-          },
-          userRole,
-          5
-        );
-
-        return () => {
+          // Get upcoming events
+          unsubscribeUpcoming = getUpcomingEvents(
+            (upcoming) => {
+              console.log('Upcoming events loaded:', upcoming.length);
+              setUpcomingEvents(upcoming);
+            },
+            userRole,
+            5
+          );
+          
+        } catch (error) {
+          console.error('Error loading calendar events:', error);
+          setError('Failed to load calendar events: ' + error.message);
+          setLoading(false);
           clearTimeout(loadingTimeout);
-          if (unsubscribeMonthEvents && typeof unsubscribeMonthEvents === 'function') {
-            unsubscribeMonthEvents();
-          }
-          if (unsubscribeUpcoming && typeof unsubscribeUpcoming === 'function') {
-            unsubscribeUpcoming();
-          }
-        };
-      } catch (error) {
-        console.error('Error setting up calendar listeners:', error);
-        setError('Failed to load calendar: ' + error.message);
-        setLoading(false);
+        }
+      };
+      
+      loadEvents();
+      
+      // Cleanup function
+      return () => {
         clearTimeout(loadingTimeout);
-      }
+        if (unsubscribeMonthEvents) {
+          try {
+            unsubscribeMonthEvents();
+          } catch (error) {
+            console.warn('Error unsubscribing from month events:', error);
+          }
+        }
+        if (unsubscribeUpcoming) {
+          try {
+            unsubscribeUpcoming();
+          } catch (error) {
+            console.warn('Error unsubscribing from upcoming events:', error);
+          }
+        }
+      };
     }
   }, [user, userRole, currentDate]);
+
+
 
   const handleCreateEvent = async (e) => {
     e.preventDefault();
@@ -363,6 +386,39 @@ function Calendar() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
           <p className="text-white text-lg">Loading calendar...</p>
+          <p className="text-white/80 text-sm mt-2">This may take a few moments</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+        <div className="text-center max-w-md mx-4">
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 border border-white/20">
+            <div className="text-red-200 text-6xl mb-4">⚠️</div>
+            <h2 className="text-white text-xl font-bold mb-4">Calendar Loading Error</h2>
+            <p className="text-white/80 mb-6">{error}</p>
+            <div className="space-y-3">
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full bg-white text-primary px-6 py-3 rounded-lg font-medium hover:bg-gray-100 transition-colors"
+              >
+                🔄 Refresh Page
+              </button>
+              <button
+                onClick={() => {
+                  setError('');
+                  setLoading(true);
+                  // This will trigger the useEffect to reload
+                }}
+                className="w-full bg-white/20 text-white px-6 py-3 rounded-lg font-medium hover:bg-white/30 transition-colors"
+              >
+                🔁 Try Again
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );

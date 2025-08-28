@@ -481,7 +481,7 @@ const AdminDashboard = () => {
           {activeTab === 'teams' && (
             <div className="lg:col-span-3 bg-white p-6 rounded-lg shadow-sm border border-secondary">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-text-primary">Team Management</h3>
+                <h3 className="text-xl font-semibold text-text-primary">Team</h3>
                 <div className="flex gap-2">
                   <button 
                     onClick={async () => {

@@ -16,8 +16,8 @@ export { auth };
 export const signup = async (email, password, userData) => {
   const { role, firstName, lastName, dateOfBirth, parentEmail, consent, teamPreference } = userData;
   
-  if (role === 'junior' && !consent) {
-    throw new Error('Parental consent required for junior users');
+  if (role === 'player' && !consent) {
+    throw new Error('Parental consent required for players under 18');
   }
   
   try {
@@ -38,8 +38,8 @@ export const signup = async (email, password, userData) => {
       role,
       dateOfBirth: new Date(dateOfBirth),
       teamPreference: teamPreference || null,
-      parentEmail: role === 'junior' ? parentEmail : null,
-      consent: role === 'junior' ? consent : true,
+      parentEmail: role === 'player' ? parentEmail : null,
+      consent: role === 'player' ? consent : true,
       isActive: true,
       emailVerified: user.emailVerified,
       profileComplete: false
@@ -204,7 +204,7 @@ export const hasAnyRole = async (requiredRoles) => {
 };
 
 // Listen to authentication state changes
-export const onAuthStateChange = (callback) => {
+export const listenToAuthState = (callback) => {
   return onAuthStateChanged(auth, callback);
 };
 
@@ -217,14 +217,7 @@ export const getCurrentUserProfile = async () => {
     const userData = await getUserData(user.uid);
     if (!userData) return null;
     
-    // Add additional role-specific data
-    if (userData.role === 'junior') {
-      // Import junior service dynamically to avoid circular dependencies
-      const { juniorsService } = await import('./database');
-      const juniorProfile = await juniorsService.getJuniorProfile(user.uid);
-      return { ...userData, juniorProfile };
-    }
-    
+    // Add additional role-specific data if needed in the future
     return userData;
   } catch (error) {
     console.error('Error getting current user profile:', error);

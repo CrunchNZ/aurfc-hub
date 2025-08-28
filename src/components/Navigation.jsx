@@ -4,16 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import Logo from './Logo';
-import { 
-  Menu, 
-  X, 
-  Home, 
-  Users, 
-  Calendar, 
-  MessageSquare, 
-  User, 
+import {
+  Menu,
+  X,
+  Home,
+  Users,
+  Calendar,
+  MessageSquare,
+  User,
   Settings,
-  Baby,
   CreditCard,
   ShoppingBag,
   BarChart3,
@@ -70,28 +69,28 @@ const Navigation = ({ user }) => {
         { path: '/chat', label: 'Team Messages', icon: MessageSquare, roles: ['player'] },
       ],
       coach: [
-        { path: '/team-management', label: 'Team Management', icon: Users, roles: ['coach', 'manager'] },
-        { path: '/calendar', label: 'Update Team Schedule', icon: Calendar, roles: ['coach', 'manager'] },
+        { path: '/team-management', label: 'Team', icon: Users, roles: ['coach', 'manager'] },
+        { path: '/calendar', label: 'Schedule', icon: Calendar, roles: ['coach', 'manager'] },
+        { path: '/attendance', label: 'Attendance', icon: Calendar, roles: ['coach', 'manager'] },
         { path: '/chat', label: 'Messaging', icon: MessageSquare, roles: ['coach', 'manager'] },
-        { path: '/junior-portal', label: 'Junior Portal', icon: Baby, roles: ['coach', 'manager'] },
       ],
       manager: [
-        { path: '/team-management', label: 'Team Management', icon: Users, roles: ['coach', 'manager'] },
-        { path: '/calendar', label: 'Update Team Schedule', icon: Calendar, roles: ['coach', 'manager'] },
+        { path: '/team-management', label: 'Team', icon: Users, roles: ['coach', 'manager'] },
+        { path: '/calendar', label: 'Schedule', icon: Calendar, roles: ['coach', 'manager'] },
+        { path: '/attendance', label: 'Attendance', icon: Calendar, roles: ['coach', 'manager'] },
         { path: '/chat', label: 'Messaging', icon: MessageSquare, roles: ['coach', 'manager'] },
-        { path: '/junior-portal', label: 'Junior Portal', icon: Baby, roles: ['coach', 'manager'] },
       ],
       admin: [
         { path: '/club-management', label: 'Club Management', icon: Building2, roles: ['admin'] },
         { path: '/financial-management', label: 'Financial Management', icon: DollarSign, roles: ['admin'] },
         { path: '/member-management', label: 'Member Management', icon: Users, roles: ['admin'] },
+        { path: '/attendance', label: 'Attendance', icon: Calendar, roles: ['admin'] },
         { path: '/reports', label: 'Reports & Analytics', icon: BarChart3, roles: ['admin'] },
         { path: '/system-admin', label: 'System Settings', icon: Settings, roles: ['admin'] },
       ],
       parent: [
         { path: '/calendar', label: 'Family Schedule', icon: Calendar, roles: ['parent'] },
         { path: '/chat', label: 'Family Messages', icon: MessageSquare, roles: ['parent'] },
-        { path: '/junior-portal', label: 'Junior Portal', icon: Baby, roles: ['parent'] },
       ]
     };
 

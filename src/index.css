@@ -324,12 +324,7 @@
     border: 1px solid var(--secondary-light);
   }
   
-  /* Junior Portal */
-  .junior-card {
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
-    border: 1px solid var(--secondary-light);
-  }
+
 }
 
 /* Global Override for Any White Text on White Background */

@@ -1,0 +1,2209 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { 
+  getTeamById,
+  getAllTeams
+} from '../services/team';
+import {
+  createMatch,
+  getMatch,
+  updateMatchStatus,
+  updateMatch,
+  startMatchTimer,
+  pauseMatchTimer,
+  resumeMatchTimer,
+  endPeriod,
+  recordSubstitution,
+  recordEvent,
+  togglePossession,
+  toggleTerritory,
+  listenToMatch,
+  calculateMatchDuration,
+  formatMatchTime,
+  getCurrentPeriodDescription,
+  calculatePossessionPercentage,
+  calculateTerritoryPercentage,
+  MATCH_STATUS,
+  PERIODS,
+  TIMER_STATES,
+  EVENT_TYPES,
+  SUBSTITUTION_REASONS
+} from '../services/gameday';
+import {
+  Play,
+  Pause,
+  Square,
+  RotateCcw,
+  Users,
+  Trophy,
+  Clock,
+  Target,
+  Shield,
+  TrendingUp,
+  Activity,
+  CheckCircle,
+  AlertCircle,
+  UserCheck,
+  Settings,
+  ArrowLeft,
+  Plus,
+  Minus,
+  X,
+  Zap,
+  Flag,
+  Award,
+  AlertTriangle,
+  UserMinus,
+  UserPlus
+} from 'lucide-react';
+
+// ============================================================================
+// GAMEDAY COMPONENT
+// ============================================================================
+
+const GameDay = () => {
+  // URL and navigation
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { currentUser: user } = useAuth();
+  
+  // Core state
+  const [team, setTeam] = useState(null);
+  const [match, setMatch] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [availableTeams, setAvailableTeams] = useState([]);
+  const [showTeamSelection, setShowTeamSelection] = useState(false);
+  
+  // Match management
+  const [matchStatus, setMatchStatus] = useState(MATCH_STATUS.SCHEDULED);
+  const [currentPeriod, setCurrentPeriod] = useState(1);
+  const [matchTime, setMatchTime] = useState(0);
+  const [timerState, setTimerState] = useState(TIMER_STATES.STOPPED);
+  const [halfLength, setHalfLength] = useState(40); // Default 40 minutes
+  const [showHalfTimeConfirm, setShowHalfTimeConfirm] = useState(false);
+  const [showHalfTimeReport, setShowHalfTimeReport] = useState(false);
+  const [showStartSecondHalfConfirm, setShowStartSecondHalfConfirm] = useState(false);
+  const [showEndMatchConfirm, setShowEndMatchConfirm] = useState(false);
+  const [showEndMatchReport, setShowEndMatchReport] = useState(false);
+  const [firstHalfStats, setFirstHalfStats] = useState(null);
+  const [secondHalfStats, setSecondHalfStats] = useState(null);
+  const [fullMatchStats, setFullMatchStats] = useState(null);
+  
+  // Player management state
+  const [selectedPosition, setSelectedPosition] = useState(null);
+  const [draggedPlayer, setDraggedPlayer] = useState(null);
+  const [availablePlayers, setAvailablePlayers] = useState([]);
+  
+  // Existing matches state
+  const [existingMatches, setExistingMatches] = useState([]);
+  
+  // UI state
+  const [showCreateMatch, setShowCreateMatch] = useState(false);
+  const [showSubstitutionModal, setShowSubstitutionModal] = useState(false);
+  const [showAdvancedStats, setShowAdvancedStats] = useState(false);
+  const [showScoringModal, setShowScoringModal] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [scoringEvent, setScoringEvent] = useState(null);
+  
+  // Form states
+  const [matchForm, setMatchForm] = useState({
+    opponent: '',
+    date: new Date().toISOString().split('T')[0],
+    startingXV: [],
+    substitutes: []
+  });
+  
+  // Refs
+  const timerRef = useRef(null);
+  const unsubscribeRef = useRef(null);
+  
+  // Rugby positions with grid coordinates (vertical layout - 8 rows x 7 columns)
+  const ALL_POSITIONS = [
+    { number: 1, name: 'Loosehead Prop', shortName: '1. LHP', gridRow: 1, gridCol: 2 },
+    { number: 2, name: 'Hooker', shortName: '2. Hooker', gridRow: 1, gridCol: 3 },
+    { number: 3, name: 'Tighthead Prop', shortName: '3. THP', gridRow: 1, gridCol: 4 },
+    { number: 4, name: 'Lock', shortName: '4. Lock', gridRow: 2, gridCol: 2 },
+    { number: 5, name: 'Lock', shortName: '5. Lock', gridRow: 2, gridCol: 4 },
+    { number: 6, name: 'Blindside Flanker', shortName: '6. BSF', gridRow: 3, gridCol: 1 },
+    { number: 7, name: 'Openside Flanker', shortName: '7. OSF', gridRow: 3, gridCol: 5 },
+    { number: 8, name: 'Number 8', shortName: '8. No.8', gridRow: 4, gridCol: 3 },
+    { number: 9, name: 'Scrum Half', shortName: '9. SH', gridRow: 5, gridCol: 3 },
+    { number: 10, name: 'Fly Half', shortName: '10. FH', gridRow: 6, gridCol: 3 },
+    { number: 11, name: 'Left Wing', shortName: '11. LW', gridRow: 6, gridCol: 1 },
+    { number: 12, name: 'Inside Centre', shortName: '12. IC', gridRow: 7, gridCol: 2 },
+    { number: 13, name: 'Outside Centre', shortName: '13. OC', gridRow: 7, gridCol: 4 },
+    { number: 14, name: 'Right Wing', shortName: '14. RW', gridRow: 6, gridCol: 5 },
+    { number: 15, name: 'Fullback', shortName: '15. FB', gridRow: 8, gridCol: 3 }
+  ];
+
+  // Scoring system constants
+  const SCORING = {
+    TRY: 5,
+    CONVERSION: 2,
+    PENALTY_GOAL: 3,
+    DROP_GOAL: 3
+  };
+
+  // Load team data and initialize
+  useEffect(() => {
+    if (user && user.uid) {
+      loadTeamData();
+    }
+  }, [user]);
+
+  // Set up real-time match listener
+  useEffect(() => {
+    if (match?.id) {
+      unsubscribeRef.current = listenToMatch(match.id, (updatedMatch) => {
+        if (updatedMatch) {
+          setMatch(updatedMatch);
+          setMatchStatus(updatedMatch.status);
+          setCurrentPeriod(updatedMatch.currentPeriod);
+          setTimerState(updatedMatch.matchTimer.state);
+        }
+      });
+    }
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+  }, [match?.id]);
+
+  // Timer effect
+  useEffect(() => {
+    if (timerState === TIMER_STATES.RUNNING) {
+      timerRef.current = setInterval(() => {
+        setMatchTime(prev => prev + 1000);
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [timerState]);
+
+  const loadTeamData = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const teamId = searchParams.get('team');
+      if (!teamId) {
+        // No team selected - load available teams for selection
+        try {
+          await loadAvailableTeams();
+          setShowTeamSelection(true);
+        } catch (teamError) {
+          console.error('Error loading available teams:', teamError);
+          setError('Failed to load available teams. Please try again.');
+        }
+        setLoading(false);
+        return;
+      }
+
+      const teamData = await getTeamById(teamId);
+      if (!teamData) {
+        setError('Team not found. Please check the team ID and try again.');
+        return;
+      }
+
+      setTeam(teamData);
+      
+      // Check if there's an active match for this team and load existing matches
+      try {
+        const activeMatch = await checkForActiveMatch(teamId);
+        if (activeMatch) {
+          setMatch(activeMatch);
+          setMatchStatus(activeMatch.status);
+          setCurrentPeriod(activeMatch.currentPeriod);
+          setTimerState(activeMatch.matchTimer.state);
+          
+          if (activeMatch.matchTimer.state === TIMER_STATES.RUNNING) {
+            const duration = calculateMatchDuration(activeMatch);
+            setMatchTime(duration);
+          }
+        }
+        // Load existing matches regardless of active match
+        await loadExistingMatches(teamId);
+      } catch (matchError) {
+        console.error('Error checking for active match:', matchError);
+        // Continue without active match - not a critical error
+        // Still try to load existing matches
+        await loadExistingMatches(teamId);
+      }
+    } catch (error) {
+      console.error('Error loading team data:', error);
+      setError('Failed to load team data: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAvailableTeams = async () => {
+    try {
+      console.log('Loading available teams...');
+      const teams = await getAllTeams();
+      console.log('Teams loaded:', teams);
+      setAvailableTeams(teams || []);
+    } catch (error) {
+      console.error('Error loading available teams:', error);
+      setError('Failed to load available teams: ' + error.message);
+      setAvailableTeams([]);
+    }
+  };
+
+  const handleTeamSelection = async (selectedTeam) => {
+    try {
+      console.log('Team selected:', selectedTeam);
+      setLoading(true);
+      setError('');
+      
+      const teamData = await getTeamById(selectedTeam.id);
+      if (!teamData) {
+        setError('Team not found. Please check the team ID and try again.');
+        return;
+      }
+
+      setTeam(teamData);
+      setShowTeamSelection(false);
+      
+      // Check if there's an active match for this team and load existing matches
+      try {
+        const activeMatch = await checkForActiveMatch(selectedTeam.id);
+        if (activeMatch) {
+          setMatch(activeMatch);
+          setMatchStatus(activeMatch.status);
+          setCurrentPeriod(activeMatch.currentPeriod);
+          setTimerState(activeMatch.matchTimer.state);
+          
+          if (activeMatch.matchTimer.state === TIMER_STATES.RUNNING) {
+            const duration = calculateMatchDuration(activeMatch);
+            setMatchTime(duration);
+          }
+        }
+        // Load existing matches regardless of active match
+        await loadExistingMatches(selectedTeam.id);
+      } catch (matchError) {
+        console.error('Error checking for active match:', matchError);
+        // Continue without active match - not a critical error
+        // Still try to load existing matches
+        await loadExistingMatches(selectedTeam.id);
+      }
+    } catch (error) {
+      console.error('Error selecting team:', error);
+      setError('Failed to select team: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkForActiveMatch = async (teamId) => {
+    try {
+      console.log('Checking for active match for team:', teamId);
+      // For now, return null to allow creating new matches
+      // In the future, this could check for matches with status 'scheduled' or 'in_progress'
+      return null;
+    } catch (error) {
+      console.error('Error checking for active match:', error);
+      return null;
+    }
+  };
+
+  const loadExistingMatches = async (teamId) => {
+    try {
+      console.log('Loading existing matches for team:', teamId);
+      // This would load matches from the database
+      // For now, we'll set an empty array
+      setExistingMatches([]);
+    } catch (error) {
+      console.error('Error loading existing matches:', error);
+      setExistingMatches([]);
+    }
+  };
+
+  const loadExistingMatch = async (matchId) => {
+    try {
+      console.log('Loading existing match:', matchId);
+      const matchData = await getMatch(matchId);
+      if (matchData) {
+        setMatch(matchData);
+        setMatchStatus(matchData.status);
+        setCurrentPeriod(matchData.currentPeriod);
+        setTimerState(matchData.matchTimer?.state || TIMER_STATES.STOPPED);
+        setError('');
+      } else {
+        setError('Match not found');
+      }
+    } catch (error) {
+      console.error('Error loading existing match:', error);
+      setError('Failed to load match: ' + error.message);
+    }
+  };
+
+  // Match timer controls
+  const handleStartMatch = async () => {
+    if (!match) return;
+    
+    try {
+      await startMatchTimer(match.id);
+      setMatchStatus(MATCH_STATUS.IN_PROGRESS);
+      setTimerState(TIMER_STATES.RUNNING);
+    } catch (error) {
+      setError('Failed to start match: ' + error.message);
+    }
+  };
+
+  const handlePauseMatch = async () => {
+    if (!match) return;
+    
+    try {
+      await pauseMatchTimer(match.id);
+      setTimerState(TIMER_STATES.PAUSED);
+    } catch (error) {
+      setError('Failed to pause match: ' + error.message);
+    }
+  };
+
+  const handleResumeMatch = async () => {
+    if (!match) return;
+    
+    try {
+      await resumeMatchTimer(match.id);
+      setTimerState(TIMER_STATES.RUNNING);
+    } catch (error) {
+      setError('Failed to resume match: ' + error.message);
+    }
+  };
+
+  const handleEndPeriod = async () => {
+    if (!match) return;
+    
+    try {
+      await endPeriod(match.id, currentPeriod);
+      if (currentPeriod === 1) {
+        setCurrentPeriod('half_time');
+      } else if (currentPeriod === 'half_time') {
+        setCurrentPeriod(2);
+      }
+    } catch (error) {
+      setError('Failed to end period: ' + error.message);
+    }
+  };
+
+  const handleHalfTime = () => {
+    if (currentPeriod === 1) {
+      setShowHalfTimeConfirm(true);
+    } else if (currentPeriod === 'half_time') {
+      setShowHalfTimeReport(true);
+    }
+  };
+
+  const handleStartSecondHalf = () => {
+    if (currentPeriod === 'half_time') {
+      setShowStartSecondHalfConfirm(true);
+    }
+  };
+
+  const handleEndMatch = () => {
+    if (currentPeriod === 2) {
+      setShowEndMatchConfirm(true);
+    }
+  };
+
+  const confirmHalfTime = async () => {
+    if (!match) return;
+    
+    try {
+      // Capture first half statistics
+      const firstHalfData = {
+        period: 1,
+        duration: matchTime,
+        statistics: {
+          possession: { team: match.statistics?.possession?.team || 0, opponent: match.statistics?.possession?.opponent || 0 },
+          territory: { team: match.statistics?.territory?.team || 0, opponent: match.statistics?.territory?.opponent || 0 },
+          tries: { team: match.statistics?.tries?.team || 0, opponent: match.statistics?.tries?.opponent || 0 },
+          conversions: { team: match.statistics?.conversions?.team || 0, opponent: match.statistics?.conversions?.opponent || 0 },
+          penaltyGoals: { team: match.statistics?.penaltyGoals?.team || 0, opponent: match.statistics?.penaltyGoals?.opponent || 0 },
+          dropGoals: { team: match.statistics?.dropGoals?.team || 0, opponent: match.statistics?.dropGoals?.opponent || 0 },
+          errors: { team: match.statistics?.errors?.team || 0, opponent: match.statistics?.errors?.opponent || 0 },
+          penalties: { team: match.statistics?.penalties?.team || 0, opponent: match.statistics?.penalties?.opponent || 0 },
+          turnovers: { team: match.statistics?.turnovers?.team || 0, opponent: match.statistics?.turnovers?.opponent || 0 }
+        },
+        score: {
+          team: (match.statistics?.tries?.team || 0) * 5 + (match.statistics?.conversions?.team || 0) * 2 + (match.statistics?.penaltyGoals?.team || 0) * 3 + (match.statistics?.dropGoals?.team || 0) * 3,
+          opponent: (match.statistics?.tries?.opponent || 0) * 5 + (match.statistics?.conversions?.opponent || 0) * 2 + (match.statistics?.penaltyGoals?.opponent || 0) * 3 + (match.statistics?.dropGoals?.opponent || 0) * 3
+        }
+      };
+      
+      setFirstHalfStats(firstHalfData);
+      
+      // End first half
+      await endPeriod(match.id, 1);
+      setCurrentPeriod('half_time');
+      setShowHalfTimeConfirm(false);
+      setShowHalfTimeReport(true);
+      
+      // Reset timer for second half
+      setMatchTime(0);
+      setTimerState(TIMER_STATES.STOPPED);
+    } catch (error) {
+      setError('Failed to end first half: ' + error.message);
+    }
+  };
+
+  const startSecondHalf = async () => {
+    if (!match) return;
+    
+    try {
+      setCurrentPeriod(2);
+      setShowHalfTimeReport(false);
+      setFirstHalfStats(null);
+      setShowStartSecondHalfConfirm(false);
+      // Timer will be started manually by coach
+    } catch (error) {
+      setError('Failed to start second half: ' + error.message);
+    }
+  };
+
+  const confirmStartSecondHalf = async () => {
+    if (!match) return;
+    
+    try {
+      setCurrentPeriod(2);
+      setShowHalfTimeReport(false);
+      setFirstHalfStats(null);
+      setShowStartSecondHalfConfirm(false);
+      // Timer will be started manually by coach
+    } catch (error) {
+      setError('Failed to start second half: ' + error.message);
+    }
+  };
+
+  const confirmEndMatch = async () => {
+    if (!match) return;
+    
+    try {
+      // Capture second half statistics
+      const secondHalfData = {
+        period: 2,
+        duration: matchTime,
+        statistics: {
+          possession: { team: match.statistics?.possession?.team || 0, opponent: match.statistics?.possession?.opponent || 0 },
+          territory: { team: match.statistics?.territory?.team || 0, opponent: match.statistics?.territory?.opponent || 0 },
+          tries: { team: match.statistics?.tries?.team || 0, opponent: match.statistics?.tries?.opponent || 0 },
+          conversions: { team: match.statistics?.conversions?.team || 0, opponent: match.statistics?.conversions?.opponent || 0 },
+          penaltyGoals: { team: match.statistics?.penaltyGoals?.team || 0, opponent: match.statistics?.penaltyGoals?.opponent || 0 },
+          dropGoals: { team: match.statistics?.dropGoals?.team || 0, opponent: match.statistics?.dropGoals?.opponent || 0 },
+          errors: { team: match.statistics?.errors?.team || 0, opponent: match.statistics?.errors?.opponent || 0 },
+          penalties: { team: match.statistics?.penalties?.team || 0, opponent: match.statistics?.penalties?.opponent || 0 },
+          turnovers: { team: match.statistics?.turnovers?.team || 0, opponent: match.statistics?.turnovers?.opponent || 0 }
+        },
+        score: {
+          team: (match.statistics?.tries?.team || 0) * 5 + (match.statistics?.conversions?.team || 0) * 2 + (match.statistics?.penaltyGoals?.team || 0) * 3 + (match.statistics?.dropGoals?.team || 0) * 3,
+          opponent: (match.statistics?.tries?.opponent || 0) * 5 + (match.statistics?.conversions?.opponent || 0) * 2 + (match.statistics?.penaltyGoals?.opponent || 0) * 3 + (match.statistics?.dropGoals?.opponent || 0) * 3
+        }
+      };
+      
+      setSecondHalfStats(secondHalfData);
+      
+      // Calculate full match statistics
+      const fullMatchData = {
+        firstHalf: firstHalfStats,
+        secondHalf: secondHalfData,
+        totalScore: {
+          team: firstHalfStats?.score?.team + secondHalfData.score.team,
+          opponent: firstHalfStats?.score?.opponent + secondHalfData.score.opponent
+        },
+        totalDuration: firstHalfStats?.duration + secondHalfData.duration
+      };
+      
+      setFullMatchStats(fullMatchData);
+      
+      // End match
+      await updateMatchStatus(match.id, MATCH_STATUS.COMPLETED);
+      setMatchStatus(MATCH_STATUS.COMPLETED);
+      setCurrentPeriod('completed');
+      setShowEndMatchConfirm(false);
+      setShowEndMatchReport(true);
+      
+      // Stop timer
+      setTimerState(TIMER_STATES.STOPPED);
+    } catch (error) {
+      setError('Failed to end match: ' + error.message);
+    }
+  };
+
+  const formatTime = (minutes) => {
+    return `${minutes} min`;
+  };
+
+  const getHalfTimeProgress = () => {
+    if (currentPeriod === 1) {
+      return Math.min((matchTime / (halfLength * 60 * 1000)) * 100, 100);
+    }
+    return 0;
+  };
+
+  // Get players suitable for a specific position based on their preferences
+  const getPlayersForPosition = (positionNumber) => {
+    const position = ALL_POSITIONS.find(p => p.number === positionNumber);
+    if (!position || !team?.players) return [];
+    
+    // Filter players who are not already assigned
+    const unassignedPlayers = team.players.filter(player => 
+      !match?.startingXV?.some(
+        assignedPlayer => assignedPlayer.id === player.id
+      )
+    );
+    
+    if (!unassignedPlayers.length) return [];
+    
+    // Position mapping for intelligent suggestions
+    const positionMapping = {
+      // Props (1 & 3) - can be filled by players with "Prop" preference
+      1: ['Prop'], // Loosehead Prop
+      3: ['Prop'], // Tighthead Prop
+      
+      // Hooker (2)
+      2: ['Hooker'],
+      
+      // Locks (4 & 5)
+      4: ['Lock'],
+      5: ['Lock'],
+      
+      // Flankers (6 & 7) - can be filled by players with "Flanker" preference
+      6: ['Flanker'], // Blindside Flanker
+      7: ['Flanker'], // Openside Flanker
+      
+      // Number 8 (8)
+      8: ['Number 8'],
+      
+      // Half Backs (9 & 10)
+      9: ['Half Back'], // Scrum Half
+      10: ['1st-Five'], // Fly Half
+      
+      // Centres (12 & 13)
+      12: ['2nd-Five'], // Inside Centre
+      13: ['Centre'], // Outside Centre
+      
+      // Wings (11 & 14) - can be filled by players with "Wing" preference
+      11: ['Wing'], // Left Wing
+      14: ['Wing'], // Right Wing
+      
+      // Fullback (15)
+      15: ['Fullback']
+    };
+    
+    const targetPositions = positionMapping[positionNumber] || [];
+    
+    // Score players based on position preference match
+    const scoredPlayers = unassignedPlayers.map(player => {
+      let score = 0;
+      let bestMatch = '';
+      
+      // Check position1 (highest priority)
+      if (player.position1 && targetPositions.includes(player.position1)) {
+        score += 10;
+        bestMatch = player.position1;
+      }
+      // Check position2 (medium priority)
+      else if (player.position2 && targetPositions.includes(player.position2)) {
+        score += 6;
+        bestMatch = player.position2;
+      }
+      // Check position3 (lowest priority)
+      else if (player.position3 && targetPositions.includes(player.position3)) {
+        score += 3;
+        bestMatch = player.position3;
+      }
+      
+      return {
+        ...player,
+        positionScore: score,
+        bestMatch,
+        isPreferred: score > 0
+      };
+    });
+    
+    // Sort by score (highest first) and then by name
+    return scoredPlayers
+      .sort((a, b) => {
+        if (b.positionScore !== a.positionScore) {
+          return b.positionScore - a.positionScore;
+        }
+        return (a.firstName + ' ' + a.lastName).localeCompare(b.firstName + ' ' + b.lastName);
+      });
+  };
+
+  // Statistics tracking
+  const handleTogglePossession = async (team = 'team') => {
+    if (!match) return;
+    
+    try {
+      await togglePossession(match.id, team);
+    } catch (error) {
+      setError('Failed to toggle possession: ' + error.message);
+    }
+  };
+
+  const handleToggleTerritory = async (team = 'team') => {
+    if (!match) return;
+    
+    try {
+      await toggleTerritory(match.id, team);
+    } catch (error) {
+      setError('Failed to toggle territory: ' + error.message);
+    }
+  };
+
+  const handleRecordEvent = async (eventType, eventData = {}) => {
+    if (!match) return;
+    
+    try {
+      await recordEvent(match.id, eventType, {
+        ...eventData,
+        period: currentPeriod
+      });
+    } catch (error) {
+      setError('Failed to record event: ' + error.message);
+    }
+  };
+
+  const handleScoringEvent = (eventType) => {
+    setScoringEvent({
+      type: eventType,
+      points: SCORING[eventType],
+      description: eventType === 'TRY' ? 'Try Scored' : 
+                  eventType === 'CONVERSION' ? 'Conversion' : 
+                  eventType === 'PENALTY_GOAL' ? 'Penalty Goal' : 'Drop Goal'
+    });
+    setShowScoringModal(true);
+  };
+
+  const handleScoringSubmit = async (playerId, playerName) => {
+    if (!match || !scoringEvent) return;
+    
+    try {
+      await recordEvent(match.id, scoringEvent.type, {
+        team: 'team',
+        period: currentPeriod,
+        playerId,
+        playerName,
+        points: scoringEvent.points
+      });
+      
+      setShowScoringModal(false);
+      setScoringEvent(null);
+    } catch (error) {
+      setError('Failed to record scoring event: ' + error.message);
+    }
+  };
+
+  const handleTeamEvent = async (eventType, team) => {
+    if (!match) return;
+    
+    try {
+      // Get current statistics
+      const currentStats = match.statistics || {};
+      const currentCount = currentStats[eventType]?.[team] || 0;
+      
+      // Update the specific statistic
+      const updatedStats = {
+        ...currentStats,
+        [eventType]: {
+          ...currentStats[eventType],
+          [team]: currentCount + 1
+        }
+      };
+      
+      // Update match in Firestore
+      await updateMatch(match.id, { statistics: updatedStats });
+    } catch (error) {
+      setError('Failed to record event: ' + error.message);
+    }
+  };
+
+  // Player management
+  const handlePositionClick = (position) => {
+    setSelectedPosition(position);
+  };
+
+  const handlePlayerDragStart = (e, player) => {
+    setDraggedPlayer(player);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handlePositionDrop = async (e, positionNumber) => {
+    e.preventDefault();
+    if (!draggedPlayer || !match) return;
+    
+    try {
+      // Check if position is already filled
+      const existingPlayer = match.startingXV?.find(p => p.assignedPosition === positionNumber);
+      if (existingPlayer) {
+        setError('Position already filled. Remove current player first.');
+        return;
+      }
+      
+      // Add player to starting XV
+      const updatedStartingXV = [...(match.startingXV || []), {
+        ...draggedPlayer,
+        assignedPosition: positionNumber
+      }];
+      
+      // Update match in Firestore
+      await updateMatch(match.id, { startingXV: updatedStartingXV });
+      setDraggedPlayer(null);
+    } catch (error) {
+      setError('Failed to assign player: ' + error.message);
+    }
+  };
+
+  const handleAssignPlayer = async (player, positionNumber) => {
+    if (!match) return;
+    
+    try {
+      // Add player to starting XV
+      const updatedStartingXV = [...(match.startingXV || []), {
+        ...player,
+        assignedPosition: positionNumber
+      }];
+      
+      // Update match in Firestore
+      await updateMatch(match.id, { startingXV: updatedStartingXV });
+      setSelectedPosition(null);
+    } catch (error) {
+      setError('Failed to assign player: ' + error.message);
+    }
+  };
+
+  const handleRemovePlayer = async (positionNumber) => {
+    if (!match) return;
+    
+    try {
+      // Remove player from starting XV
+      const updatedStartingXV = (match.startingXV || []).filter(
+        player => player.assignedPosition !== positionNumber
+      );
+      
+      // Update match in Firestore
+      await updateMatch(match.id, { startingXV: updatedStartingXV });
+      setSelectedPosition(null);
+    } catch (error) {
+      setError('Failed to remove player: ' + error.message);
+    }
+  };
+
+  // Get available players (not assigned to any position)
+  const getAvailablePlayers = () => {
+    if (!team?.players) return [];
+    
+    const assignedPlayerIds = match?.startingXV?.map(p => p.id) || [];
+    return team.players.filter(player => !assignedPlayerIds.includes(player.id));
+  };
+
+  const handleSubstitution = async (substitutionData) => {
+    if (!match) return;
+    
+    try {
+      await recordSubstitution(match.id, substitutionData);
+      setShowSubstitutionModal(false);
+      setSelectedPosition(null);
+    } catch (error) {
+      setError('Failed to record substitution: ' + error.message);
+    }
+  };
+
+  // Create match
+  const handleCreateMatch = async (e) => {
+    e.preventDefault();
+    
+    if (!matchForm.opponent.trim()) {
+      setError('Opponent name is required');
+      return;
+    }
+
+    try {
+      console.log('Creating match with data:', {
+        teamId: team.id,
+        teamName: team.name,
+        opponent: matchForm.opponent.trim(),
+        date: new Date(matchForm.date),
+        startingXV: team.players?.slice(0, 15) || [],
+        substitutes: team.players?.slice(15) || [],
+        createdBy: user.uid
+      });
+
+      const newMatch = await createMatch({
+        teamId: team.id,
+        teamName: team.name,
+        opponent: matchForm.opponent.trim(),
+        date: new Date(matchForm.date),
+        startingXV: team.players?.slice(0, 15) || [],
+        substitutes: team.players?.slice(15) || [],
+        createdBy: user.uid
+      });
+
+      console.log('Match created successfully:', newMatch);
+      setMatch(newMatch);
+      setMatchStatus(MATCH_STATUS.SCHEDULED);
+      setShowCreateMatch(false);
+      setError('');
+    } catch (error) {
+      console.error('Error creating match:', error);
+      setError('Failed to create match: ' + error.message);
+    }
+  };
+
+  // Authentication check
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary to-secondary p-6">
+        <div className="max-w-2xl mx-auto text-center">
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 border border-white/20">
+            <div className="text-red-200 text-6xl mb-4">⚠️</div>
+            <h2 className="text-white text-xl font-bold mb-4">Login Required</h2>
+            <p className="text-white/80">Please log in to access GameDay management.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white text-lg">Loading GameDay...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && !match) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+        <div className="text-center max-w-md mx-4">
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 border border-white/20">
+            <div className="text-red-200 text-6xl mb-4">⚠️</div>
+            <h2 className="text-white text-xl font-bold mb-4">Error Loading GameDay</h2>
+            <p className="text-white/80 mb-6">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full bg-white text-primary px-6 py-3 rounded-lg font-medium hover:bg-gray-100 transition-colors"
+            >
+              🔄 Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-primary to-secondary p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-7xl mx-auto"
+      >
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={() => navigate('/team-builder')}
+            className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} className="text-white" />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-white/20 rounded-lg">
+              <Trophy size={32} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white">GameDay Management</h1>
+              {team && <p className="text-white/80">{team.name} - Live Match Control</p>}
+            </div>
+          </div>
+          
+          {team && (
+            <button
+              onClick={() => {
+                setTeam(null);
+                setMatch(null);
+                setShowTeamSelection(true);
+                setError('');
+              }}
+              className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors text-sm"
+            >
+              Change Team
+            </button>
+          )}
+        </div>
+      </div>
+
+        {/* Team Selection Interface */}
+        {showTeamSelection && !team && (
+          <div className="card mb-6">
+            <div className="p-6 text-center">
+              <div className="text-6xl mb-4">🏉</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Select a Team</h2>
+              <p className="text-gray-600 mb-6">Choose a team to manage GameDay activities</p>
+              
+              {availableTeams.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+                  {availableTeams.map((teamOption) => (
+                    <div
+                      key={teamOption.id}
+                      className="p-4 border border-gray-200 rounded-lg hover:border-primary hover:shadow-md transition-all cursor-pointer"
+                      onClick={() => handleTeamSelection(teamOption)}
+                    >
+                      <div className="text-2xl mb-2">🏉</div>
+                      <h3 className="font-semibold text-gray-900 mb-1">{teamOption.name}</h3>
+                      <p className="text-sm text-gray-600">
+                        {teamOption.players?.length || 0} players
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-gray-500 mb-4">No teams available</p>
+                  <button
+                    onClick={() => navigate('/team-builder')}
+                    className="btn-secondary"
+                  >
+                    Create a Team
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Match Control Panel */}
+        {!showTeamSelection && !match ? (
+          <div className="card mb-6">
+            <div className="p-6 text-center">
+              <div className="text-6xl mb-4">🏉</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">No Active Match</h2>
+              <p className="text-gray-600 mb-6">Create a new match to start GameDay management</p>
+              
+              {/* Existing Matches Section */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Existing Matches</h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {existingMatches.length > 0 ? (
+                    existingMatches.map((existingMatch) => (
+                      <div
+                        key={existingMatch.id}
+                        className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-primary transition-colors cursor-pointer"
+                        onClick={() => loadExistingMatch(existingMatch.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              vs {existingMatch.opponent}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {new Date(existingMatch.date).toLocaleDateString()} - {existingMatch.status}
+                            </div>
+                          </div>
+                          <div className="text-sm text-blue-600 hover:text-blue-800">
+                            Load Match →
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-center">No existing matches found</p>
+                  )}
+                </div>
+              </div>
+              
+              <button
+                onClick={() => setShowCreateMatch(true)}
+                className="btn-primary btn-lg"
+              >
+                <Plus size={20} className="mr-2" />
+                Create New Match
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="card mb-6">
+            <div className="p-6">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {team.name} vs {match.opponent}
+                  </h2>
+                  <p className="text-gray-600">
+                    {new Date(match.date).toLocaleDateString()} - {getCurrentPeriodDescription(match)}
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  {/* Match Timer */}
+                  <div className="bg-gray-100 rounded-lg px-4 py-2 text-center">
+                    <div className="text-2xl font-bold text-gray-900">
+                      {formatMatchTime(matchTime)}
+                    </div>
+                    <div className="text-sm text-gray-600">Match Time</div>
+                  </div>
+                  
+                  {/* Timer Controls */}
+                  <div className="flex gap-2">
+                    {timerState === TIMER_STATES.STOPPED && (
+                      <button
+                        onClick={handleStartMatch}
+                        className="btn-primary btn-sm"
+                        title="Start Match"
+                      >
+                        <Play size={16} />
+                      </button>
+                    )}
+                    
+                    {timerState === TIMER_STATES.RUNNING && (
+                      <button
+                        onClick={handlePauseMatch}
+                        className="btn-secondary btn-sm"
+                        title="Pause Match"
+                      >
+                        <Pause size={16} />
+                      </button>
+                    )}
+                    
+                    {timerState === TIMER_STATES.PAUSED && (
+                      <button
+                        onClick={handleResumeMatch}
+                        className="btn-primary btn-sm"
+                        title="Resume Match"
+                      >
+                        <Play size={16} />
+                      </button>
+                    )}
+                    
+                    <button
+                      onClick={handleEndPeriod}
+                      className="btn-secondary btn-sm"
+                      title="End Period"
+                    >
+                      <Square size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Half Length Configuration */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Half Length Configuration</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[15, 20, 30, 40].map((length) => (
+                        <button
+                          key={length}
+                          onClick={() => setHalfLength(length)}
+                          className={`px-3 py-1 text-sm rounded ${
+                            halfLength === length
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          {formatTime(length)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600 mb-1">Current Half Progress</div>
+                    <div className="w-32 bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${getHalfTimeProgress()}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {currentPeriod === 1 ? `${Math.floor(matchTime / 60000)}/${halfLength} min` : 
+                       currentPeriod === 2 ? `${Math.floor(matchTime / 60000)}/${halfLength} min` : 
+                       'Complete'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Match Phase Controls */}
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-900 mb-3">Match Phase Management</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* First Half Controls */}
+                  {currentPeriod === 1 && (
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-700 mb-2">First Half</div>
+                      <button
+                        onClick={handleHalfTime}
+                        className="w-full bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        🏁 Half Time
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Half Time Controls */}
+                  {currentPeriod === 'half_time' && (
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-700 mb-2">Half Time</div>
+                      <button
+                        onClick={handleStartSecondHalf}
+                        className="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        ▶️ Start Second Half
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Second Half Controls */}
+                  {currentPeriod === 2 && (
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-700 mb-2">Second Half</div>
+                      <button
+                        onClick={handleEndMatch}
+                        className="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        🏁 End Match
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Quick Actions */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Possession - Toggle with Percentage */}
+                <div className="space-y-2">
+                  <div className="text-xs text-gray-600 text-center">Possession</div>
+                  <div className="text-center mb-2">
+                    <div className="text-lg font-bold text-blue-600">
+                      {calculatePossessionPercentage(match)?.team || 0}% - {calculatePossessionPercentage(match)?.opponent || 0}%
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleTogglePossession('team')}
+                      className={`flex-1 p-2 rounded-lg border-2 transition-all text-xs font-medium ${
+                        match.statistics?.possession?.team ? 
+                          'bg-green-500 border-green-600 text-white' : 
+                          'bg-gray-100 border-gray-300 text-gray-600 hover:bg-green-100'
+                      }`}
+                    >
+                      {match.statistics?.possession?.team ? '🟢 Active' : '⚪ Inactive'}
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Territory - Toggle with Percentage */}
+                <div className="space-y-2">
+                  <div className="text-xs text-gray-600 text-center">Territory</div>
+                  <div className="text-center mb-2">
+                    <div className="text-lg font-bold text-purple-600">
+                      {calculateTerritoryPercentage(match)?.team || 0}% - {calculateTerritoryPercentage(match)?.opponent || 0}%
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleToggleTerritory('team')}
+                      className={`flex-1 p-2 rounded-lg border-2 transition-all text-xs font-medium ${
+                        match.statistics?.territory?.team ? 
+                          'bg-green-500 border-green-600 text-white' : 
+                          'bg-gray-100 border-gray-300 text-gray-600 hover:bg-green-100'
+                      }`}
+                    >
+                      {match.statistics?.territory?.team ? '🟢 Active' : '⚪ Inactive'}
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Error - Team vs Opposition with Counters */}
+                <div className="space-y-2">
+                  <div className="text-xs text-gray-600 text-center">Error</div>
+                  <div className="text-center mb-2">
+                    <div className="text-lg font-bold text-red-600">
+                      {match?.statistics?.errors?.team || 0} - {match?.statistics?.errors?.opponent || 0}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleTeamEvent(EVENT_TYPES.ERROR, 'team')}
+                      className="flex-1 p-2 rounded-lg border-2 border-red-300 bg-red-100 text-red-800 hover:bg-red-200 transition-all text-xs font-medium"
+                    >
+                      Us +1
+                    </button>
+                    <button
+                      onClick={() => handleTeamEvent(EVENT_TYPES.ERROR, 'opponent')}
+                      className="flex-1 p-2 rounded-lg border-2 border-red-300 bg-red-100 text-red-800 hover:bg-red-200 transition-all text-xs font-medium"
+                    >
+                      Opp +1
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Penalty - Team vs Opposition with Counters */}
+                <div className="space-y-2">
+                  <div className="text-xs text-gray-600 text-center">Penalty</div>
+                  <div className="text-center mb-2">
+                    <div className="text-lg font-bold text-yellow-600">
+                      {match?.statistics?.penalties?.team || 0} - {match?.statistics?.penalties?.opponent || 0}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleTeamEvent(EVENT_TYPES.PENALTY, 'team')}
+                      className="flex-1 p-2 rounded-lg border-2 border-yellow-300 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 transition-all text-xs font-medium"
+                    >
+                      Us +1
+                    </button>
+                    <button
+                      onClick={() => handleTeamEvent(EVENT_TYPES.PENALTY, 'opponent')}
+                      className="flex-1 p-2 rounded-lg border-2 border-yellow-300 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 transition-all text-xs font-medium"
+                    >
+                      Opp +1
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Rugby Field Formation */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Field View */}
+          <div className="lg:col-span-3">
+            <div className="card p-6">
+              <h3 className="text-xl font-bold mb-6">Rugby Field Formation</h3>
+              
+              {/* Rugby Pitch Grid - Vertical Layout */}
+              <div className="relative bg-green-800 rounded-lg p-8 overflow-hidden">
+                {/* Field Lines */}
+                <div className="absolute inset-8 border-2 border-white/30 rounded-lg"></div>
+                <div className="absolute top-8 bottom-8 left-1/2 w-0.5 bg-white/30 transform -translate-x-1/2"></div>
+                <div className="absolute top-1/2 left-8 right-8 h-0.5 bg-white/30 transform -translate-y-1/2"></div>
+                
+                {/* Try Lines */}
+                <div className="absolute top-8 left-8 right-8 h-1 bg-white/50"></div>
+                <div className="absolute bottom-8 left-8 right-8 h-1 bg-white/50"></div>
+
+                {/* Position Grid - Better Spaced */}
+                <div className="relative h-[700px] w-full">
+                  {ALL_POSITIONS.map((position) => {
+                    const assignedPlayer = match?.startingXV?.find(p => p.assignedPosition === position.number);
+                    const isPositionSelected = selectedPosition?.number === position.number;
+                    
+                    return (
+                                              <div
+                          key={position.number}
+                          className={`absolute w-32 h-32 transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-200 ${
+                            isPositionSelected ? 'scale-110' : 'hover:scale-105'
+                          }`}
+                          style={{
+                            left: `${(position.gridCol / 7) * 100}%`,
+                            top: `${(position.gridRow / 8) * 100}%`
+                          }}
+                          onClick={() => handlePositionClick(position)}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.add('ring-4', 'ring-blue-400', 'ring-opacity-50');
+                          }}
+                          onDragLeave={(e) => {
+                            e.currentTarget.classList.remove('ring-4', 'ring-blue-400', 'ring-opacity-50');
+                          }}
+                          onDrop={(e) => {
+                            e.currentTarget.classList.remove('ring-4', 'ring-blue-400', 'ring-opacity-50');
+                            handlePositionDrop(e, position.number);
+                          }}
+                        >
+                        {/* Position Card */}
+                        <div className={`w-full h-full rounded-lg border-2 transition-all duration-200 ${
+                          assignedPlayer 
+                            ? 'border-green-400 bg-green-100 shadow-lg' 
+                            : 'border-white/50 bg-white/20 hover:border-white/70'
+                        } ${isPositionSelected ? 'ring-4 ring-blue-400 ring-opacity-50' : ''}`}>
+                          
+                          {/* Position Number */}
+                          <div className="absolute -top-4 -left-4 w-8 h-8 bg-primary text-white text-sm font-bold rounded-full flex items-center justify-center">
+                            {position.number}
+                          </div>
+                          
+                          {/* Position Name */}
+                          <div className="absolute top-3 left-3 right-3 text-center">
+                            <div className="text-sm font-medium text-white leading-tight">
+                              {position.shortName}
+                            </div>
+                          </div>
+                          
+                          {/* Assigned Player */}
+                          {assignedPlayer && (
+                            <div className="absolute bottom-3 left-3 right-3 text-center">
+                              <div className="text-sm font-medium text-green-800 bg-green-200 px-2 py-1 rounded">
+                                {assignedPlayer.firstName}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Drop Zone Indicator */}
+                          {!assignedPlayer && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="text-white/50 text-sm text-center leading-tight">
+                                Click to<br/>Manage<br/>or Drop Player
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Panel - Statistics & Management */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Match Statistics */}
+            <div className="card p-6">
+              <h3 className="text-lg font-bold mb-4">Match Statistics</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span>Score:</span>
+                  <span className="font-medium">
+                    {match?.statistics?.tries?.team || 0} - {match?.statistics?.tries?.opponent || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Possession:</span>
+                  <span className="font-medium">
+                    {calculatePossessionPercentage(match)?.team || 0}% - {calculatePossessionPercentage(match)?.opponent || 0}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Territory:</span>
+                  <span className="font-medium">
+                    {calculateTerritoryPercentage(match)?.team || 0}% - {calculateTerritoryPercentage(match)?.opponent || 0}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Errors:</span>
+                  <span className="font-medium">
+                    {match?.statistics?.errors?.team || 0} - {match?.statistics?.errors?.opponent || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Penalties:</span>
+                  <span className="font-medium">
+                    {match?.statistics?.penalties?.team || 0} - {match?.statistics?.penalties?.opponent || 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Substitutes Bench */}
+            <div className="card p-6">
+              <h3 className="text-lg font-bold mb-4">Substitutes Bench</h3>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {match?.substitutes?.map((player, index) => (
+                  <div
+                    key={player.id || index}
+                    className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-medium text-primary">
+                          {player.firstName?.[0]}{player.lastName?.[0]}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">
+                          {player.firstName} {player.lastName}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {player.position1 || 'Position not set'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )) || (
+                  <p className="text-gray-500 text-center">No substitutes available</p>
+                )}
+              </div>
+            </div>
+
+            {/* Starting XV */}
+            <div className="card p-6">
+              <h3 className="text-lg font-bold mb-4">Starting XV</h3>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {match?.startingXV && match.startingXV.length > 0 ? (
+                  match.startingXV.map((player) => {
+                    const position = ALL_POSITIONS.find(p => p.number === player.assignedPosition);
+                    return (
+                      <div
+                        key={player.id}
+                        className="p-3 rounded-lg bg-green-50 border border-green-200"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium text-green-800">
+                              {player.firstName?.[0]}{player.lastName?.[0]}
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">
+                              {player.firstName} {player.lastName}
+                            </div>
+                            <div className="text-xs text-green-600 font-medium">
+                              {position?.shortName || `Position ${player.assignedPosition}`}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleRemovePlayer(player.assignedPosition)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                            title="Remove player"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-gray-500 text-center">No players assigned</p>
+                )}
+              </div>
+            </div>
+
+            {/* Available Players */}
+            <div className="card p-6">
+              <h3 className="text-lg font-bold mb-4">Available Players</h3>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {getAvailablePlayers().length > 0 ? (
+                  getAvailablePlayers().map((player) => {
+                    return (
+                      <div
+                        key={player.id}
+                        draggable={true}
+                        onDragStart={(e) => handlePlayerDragStart(e, player)}
+                        className="p-3 rounded-lg cursor-grab transition-all duration-200 bg-white border border-gray-200 hover:border-primary hover:shadow-md hover:scale-105"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium text-primary">
+                              {player.firstName?.[0]}{player.lastName?.[0]}
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">
+                              {player.firstName} {player.lastName}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              {player.position1 || 'Position not set'}
+                            </div>
+                            {player.position2 && (
+                              <div className="text-xs text-blue-600">
+                                2nd: {player.position2}
+                              </div>
+                            )}
+                            {player.position3 && (
+                              <div className="text-xs text-blue-600">
+                                3rd: {player.position3}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Drag to position
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-gray-500 text-center">All players assigned</p>
+                )}
+              </div>
+            </div>
+
+            {/* Position Details */}
+            {selectedPosition && (
+              <div className="card p-6">
+                <h3 className="text-lg font-bold mb-4">
+                  Position {selectedPosition.number} Details
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Position Name
+                    </label>
+                    <p className="text-gray-900">
+                      {selectedPosition.name}
+                    </p>
+                  </div>
+                  
+                  {match?.startingXV?.find(p => p.assignedPosition === selectedPosition.number) ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Assigned Player
+                      </label>
+                      <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-green-800">
+                            {match.startingXV.find(p => p.assignedPosition === selectedPosition.number)?.firstName?.[0]}
+                            {match.startingXV.find(p => p.assignedPosition === selectedPosition.number)?.lastName?.[0]}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">
+                            {match.startingXV.find(p => p.assignedPosition === selectedPosition.number)?.firstName} {match.startingXV.find(p => p.assignedPosition === selectedPosition.number)?.lastName}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {match.startingXV.find(p => p.assignedPosition === selectedPosition.number)?.position1}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleRemovePlayer(selectedPosition.number)}
+                          className="ml-auto text-red-600 hover:text-red-800"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Available Players for this Position
+                      </label>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {getPlayersForPosition(selectedPosition.number).map((player) => (
+                          <div
+                            key={player.id}
+                            className={`p-3 rounded cursor-pointer transition-all duration-200 ${
+                              player.isPreferred 
+                                ? 'bg-green-50 border border-green-200 hover:bg-green-100' 
+                                : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                            }`}
+                            onClick={() => handleAssignPlayer(player, selectedPosition.number)}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="text-sm font-medium">
+                                {player.firstName} {player.lastName}
+                              </div>
+                              {player.isPreferred && (
+                                <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                  Preferred
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-gray-600">
+                              <span>Pref: {player.position1 || 'None'}</span>
+                              {player.positionScore > 0 && (
+                                <span className={`px-2 py-0.5 rounded ${
+                                  player.positionScore >= 10 ? 'bg-green-100 text-green-800' :
+                                  player.positionScore >= 6 ? 'bg-blue-100 text-blue-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  Score: {player.positionScore}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Advanced Actions */}
+            <div className="card p-6">
+              <h3 className="text-lg font-bold mb-4">Scoring Actions</h3>
+              <div className="space-y-2">
+                <button
+                  onClick={() => handleScoringEvent('TRY')}
+                  className="w-full p-2 bg-green-100 text-green-800 rounded hover:bg-green-200 transition-colors text-sm flex items-center justify-between"
+                >
+                  <span>🏉 Try Scored</span>
+                  <span className="font-bold">+5 pts</span>
+                </button>
+                <button
+                  onClick={() => handleScoringEvent('CONVERSION')}
+                  className="w-full p-2 bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors text-sm flex items-center justify-between"
+                >
+                  <span>🥅 Conversion</span>
+                  <span className="font-bold">+2 pts</span>
+                </button>
+                <button
+                  onClick={() => handleScoringEvent('PENALTY_GOAL')}
+                  className="w-full p-2 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 transition-colors text-sm flex items-center justify-between"
+                >
+                  <span>🚩 Penalty Goal</span>
+                  <span className="font-bold">+3 pts</span>
+                </button>
+                <button
+                  onClick={() => handleScoringEvent('DROP_GOAL')}
+                  className="w-full p-2 bg-orange-100 text-orange-800 rounded hover:bg-orange-200 transition-colors text-sm flex items-center justify-between"
+                >
+                  <span>🥅 Drop Goal</span>
+                  <span className="font-bold">+3 pts</span>
+                </button>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setShowAdvancedStats(!showAdvancedStats)}
+                  className="w-full p-2 bg-purple-100 text-purple-800 rounded hover:bg-purple-200 transition-colors text-sm"
+                >
+                  📊 Advanced Stats
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Create Match Modal */}
+        {showCreateMatch && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-lg shadow-xl max-w-md w-full"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-bold mb-4">Create New Match</h3>
+                <form onSubmit={handleCreateMatch} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Opponent Team *
+                    </label>
+                    <input
+                      type="text"
+                      value={matchForm.opponent}
+                      onChange={(e) => setMatchForm({...matchForm, opponent: e.target.value})}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter opponent team name"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Match Date
+                    </label>
+                    <input
+                      type="date"
+                      value={matchForm.date}
+                      onChange={(e) => setMatchForm({...matchForm, date: e.target.value})}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    />
+                  </div>
+                  
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateMatch(false)}
+                      className="flex-1 btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 btn-primary"
+                    >
+                      Create Match
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Substitution Modal */}
+        {showSubstitutionModal && selectedPosition && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-lg shadow-xl max-w-md w-full"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-bold mb-4">
+                  Manage Position {selectedPosition.number}
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  {selectedPosition.name}
+                </p>
+                
+                <div className="space-y-3">
+                  <button
+                    onClick={() => handleSubstitution({
+                      type: 'on',
+                      position: selectedPosition.number,
+                      playerId: 'player-123', // This would be selected from available players
+                      playerName: 'John Smith',
+                      reason: SUBSTITUTION_REASONS.TACTICAL
+                    })}
+                    className="w-full p-3 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-2"
+                  >
+                    <UserPlus size={16} />
+                    Substitute On
+                  </button>
+                  
+                  <button
+                    onClick={() => handleSubstitution({
+                      type: 'off',
+                      position: selectedPosition.number,
+                      playerId: 'player-123',
+                      playerName: 'John Smith',
+                      reason: SUBSTITUTION_REASONS.TACTICAL
+                    })}
+                    className="w-full p-3 bg-red-100 text-red-800 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-2"
+                  >
+                    <UserMinus size={16} />
+                    Substitute Off
+                  </button>
+                  
+                  <button
+                    onClick={() => setShowSubstitutionModal(false)}
+                    className="w-full p-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Half Time Confirmation Modal */}
+        {showHalfTimeConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-lg shadow-xl max-w-md w-full"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-bold mb-2 text-orange-600">
+                  🏁 Confirm Half Time
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  Are you sure you want to end the first half? This will:
+                </p>
+                <ul className="text-sm text-gray-600 mb-6 space-y-2">
+                  <li>• Save first half statistics</li>
+                  <li>• Stop the match timer</li>
+                  <li>• Allow you to review first half performance</li>
+                </ul>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={confirmHalfTime}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Confirm Half Time
+                  </button>
+                  <button
+                    onClick={() => setShowHalfTimeConfirm(false)}
+                    className="flex-1 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Start Second Half Confirmation Modal */}
+        {showStartSecondHalfConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-lg shadow-xl max-w-md w-full"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-bold mb-2 text-green-600">
+                  ▶️ Start Second Half
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  Ready to begin the second half? The timer will be reset and ready to start.
+                </p>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={confirmStartSecondHalf}
+                    className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Start Second Half
+                  </button>
+                  <button
+                    onClick={() => setShowStartSecondHalfConfirm(false)}
+                    className="flex-1 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* End Match Confirmation Modal */}
+        {showEndMatchConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-lg shadow-xl max-w-md w-full"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-bold mb-2 text-red-600">
+                  🏁 End Match
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  Are you sure you want to end the match? This will:
+                </p>
+                <ul className="text-sm text-gray-600 mb-6 space-y-2">
+                  <li>• Save second half statistics</li>
+                  <li>• Generate full match report</li>
+                  <li>• Complete the match record</li>
+                </ul>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={confirmEndMatch}
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    End Match
+                  </button>
+                  <button
+                    onClick={() => setShowEndMatchConfirm(false)}
+                    className="flex-1 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Half Time Report Modal */}
+        {showHalfTimeReport && firstHalfStats && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="p-6">
+                <h3 className="text-2xl font-bold mb-4 text-orange-600">
+                  🏁 First Half Report
+                </h3>
+                
+                {/* Score Summary */}
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-orange-800 mb-2">
+                      {firstHalfStats.score.team} - {firstHalfStats.score.opponent}
+                    </div>
+                    <div className="text-orange-600 font-medium">First Half Score</div>
+                  </div>
+                </div>
+                
+                {/* Statistics Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-800 mb-3">Scoring</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tries:</span>
+                        <span className="font-medium">{firstHalfStats.statistics.tries.team} - {firstHalfStats.statistics.tries.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Conversions:</span>
+                        <span className="font-medium">{firstHalfStats.statistics.conversions.team} - {firstHalfStats.statistics.conversions.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Penalty Goals:</span>
+                        <span className="font-medium">{firstHalfStats.statistics.penaltyGoals.team} - {firstHalfStats.statistics.penaltyGoals.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Drop Goals:</span>
+                        <span className="font-medium">{firstHalfStats.statistics.dropGoals.team} - {firstHalfStats.statistics.dropGoals.opponent}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-800 mb-3">Performance</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Errors:</span>
+                        <span className="font-medium">{firstHalfStats.statistics.errors.team} - {firstHalfStats.statistics.errors.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Penalties:</span>
+                        <span className="font-medium">{firstHalfStats.statistics.penalties.team} - {firstHalfStats.statistics.penalties.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Turnovers:</span>
+                        <span className="font-medium">{firstHalfStats.statistics.turnovers.team} - {firstHalfStats.statistics.turnovers.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Duration:</span>
+                        <span className="font-medium">{Math.floor(firstHalfStats.duration / 60000)}:{String(Math.floor((firstHalfStats.duration % 60000) / 1000)).padStart(2, '0')}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={startSecondHalf}
+                    className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    ▶️ Start Second Half
+                  </button>
+                  <button
+                    onClick={() => setShowHalfTimeReport(false)}
+                    className="flex-1 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Close Report
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* End Match Report Modal */}
+        {showEndMatchReport && fullMatchStats && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="p-6">
+                <h3 className="text-2xl font-bold mb-4 text-red-600">
+                  🏁 Full Match Report
+                </h3>
+                
+                {/* Final Score */}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                  <div className="text-center">
+                    <div className="text-4xl font-bold text-red-800 mb-2">
+                      {fullMatchStats.totalScore.team} - {fullMatchStats.totalScore.opponent}
+                    </div>
+                    <div className="text-red-600 font-medium">Final Score</div>
+                  </div>
+                </div>
+                
+                {/* Half-by-Half Breakdown */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                  {/* First Half */}
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <h4 className="text-lg font-semibold text-orange-800 mb-3">First Half</h4>
+                    <div className="text-center mb-3">
+                      <div className="text-2xl font-bold text-orange-800">
+                        {fullMatchStats.firstHalf.score.team} - {fullMatchStats.firstHalf.score.opponent}
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-orange-700">Tries:</span>
+                        <span className="font-medium">{fullMatchStats.firstHalf.statistics.tries.team} - {fullMatchStats.firstHalf.statistics.tries.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-orange-700">Conversions:</span>
+                        <span className="font-medium">{fullMatchStats.firstHalf.statistics.conversions.team} - {fullMatchStats.firstHalf.statistics.conversions.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-orange-700">Penalty Goals:</span>
+                        <span className="font-medium">{fullMatchStats.firstHalf.statistics.penaltyGoals.team} - {fullMatchStats.firstHalf.statistics.penaltyGoals.opponent}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Second Half */}
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="text-lg font-semibold text-green-800 mb-3">Second Half</h4>
+                    <div className="text-center mb-3">
+                      <div className="text-2xl font-bold text-green-800">
+                        {fullMatchStats.secondHalf.score.team} - {fullMatchStats.secondHalf.score.opponent}
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-green-700">Tries:</span>
+                        <span className="font-medium">{fullMatchStats.secondHalf.statistics.tries.team} - {fullMatchStats.secondHalf.statistics.tries.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-green-700">Conversions:</span>
+                        <span className="font-medium">{fullMatchStats.secondHalf.statistics.conversions.team} - {fullMatchStats.secondHalf.statistics.conversions.opponent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-green-700">Penalty Goals:</span>
+                        <span className="font-medium">{fullMatchStats.secondHalf.statistics.penaltyGoals.team} - {fullMatchStats.secondHalf.statistics.penaltyGoals.opponent}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Match Summary */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-3">Match Summary</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-800">
+                        {Math.floor(fullMatchStats.totalDuration / 60000)}
+                      </div>
+                      <div className="text-gray-600">Total Minutes</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-800">
+                        {fullMatchStats.firstHalf.statistics.tries.team + fullMatchStats.secondHalf.statistics.tries.team}
+                      </div>
+                      <div className="text-gray-600">Total Tries</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-800">
+                        {fullMatchStats.firstHalf.statistics.errors.team + fullMatchStats.secondHalf.statistics.errors.team}
+                      </div>
+                      <div className="text-gray-600">Total Errors</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-800">
+                        {fullMatchStats.firstHalf.statistics.penalties.team + fullMatchStats.secondHalf.statistics.penalties.team}
+                      </div>
+                      <div className="text-gray-600">Total Penalties</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowEndMatchReport(false)}
+                    className="flex-1 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Close Report
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Scoring Modal */}
+        {showScoringModal && scoringEvent && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-lg shadow-xl max-w-md w-full"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-bold mb-2">
+                  {scoringEvent.description}
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  +{scoringEvent.points} points - Select the player who scored
+                </p>
+                
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {team?.players?.map((player) => (
+                    <button
+                      key={player.id}
+                      onClick={() => handleScoringSubmit(player.id, `${player.firstName} ${player.lastName}`)}
+                      className="w-full p-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-primary">
+                            {player.firstName?.[0]}{player.lastName?.[0]}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">
+                            {player.firstName} {player.lastName}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {player.position1 || 'Position not set'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  )) || (
+                    <p className="text-gray-500 text-center">No players available</p>
+                  )}
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => {
+                      setShowScoringModal(false);
+                      setScoringEvent(null);
+                    }}
+                    className="w-full p-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </motion.div>
+    </div>
+    );
+  } catch (error) {
+    console.error('Error rendering GameDay component:', error);
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+        <div className="text-center max-w-md mx-4">
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 border border-white/20">
+            <div className="text-red-200 text-6xl mb-4">⚠️</div>
+            <h2 className="text-white text-xl font-bold mb-4">GameDay Error</h2>
+            <p className="text-white/80 mb-6">
+              Something went wrong while loading GameDay. Please check the console for details.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full bg-white text-primary px-6 py-3 rounded-lg font-medium hover:bg-gray-100 transition-colors"
+            >
+              🔄 Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+};
+
+export default GameDay;

@@ -86,7 +86,7 @@ const safeCurrentTimestamp = () => {
  * Create a new invoice
  * @param {Object} invoiceData - Invoice data
  * @param {string} invoiceData.userId - User ID
- * @param {string} invoiceData.userRole - User role (junior, adult, coach)
+ * @param {string} invoiceData.userRole - User role (player, adult, coach)
  * @param {number} invoiceData.amount - Invoice amount in pence
  * @param {string} invoiceData.description - Invoice description
  * @param {Date} invoiceData.dueDate - Due date
@@ -97,7 +97,7 @@ export const createInvoice = async (invoiceData) => {
   try {
     // Apply junior discount if applicable
     let finalAmount = invoiceData.amount;
-    if (invoiceData.userRole === 'junior') {
+    if (invoiceData.userRole === 'player') {
       finalAmount = applyJuniorDiscount(invoiceData.amount);
     }
 

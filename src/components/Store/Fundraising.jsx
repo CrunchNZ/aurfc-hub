@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
 
 
-const Fundraising = ({ addToCart, user, cart }) => {
-  const { user: authUser } = useAuth();
-  const [campaigns, setCampaigns] = useState([]);
+const Fundraising = ({ addToCart, cart }) => {
+  const [fundraisingItems, setFundraisingItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
@@ -117,7 +115,7 @@ const Fundraising = ({ addToCart, user, cart }) => {
         }
       ];
 
-      setCampaigns(mockCampaigns);
+      setFundraisingItems(mockCampaigns);
     } catch (err) {
       console.error('Error loading campaigns:', err);
       setError('Failed to load campaigns');
@@ -136,7 +134,7 @@ const Fundraising = ({ addToCart, user, cart }) => {
     addToCart(cartItem);
   };
 
-  const filteredCampaigns = campaigns.filter(campaign => {
+  const filteredCampaigns = fundraisingItems.filter(campaign => {
     const matchesFilter = filter === 'all' || campaign.category === filter;
     const matchesSearch = campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          campaign.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -175,13 +173,7 @@ const Fundraising = ({ addToCart, user, cart }) => {
   };
 
   const checkEligibility = (campaign) => {
-    if (!authUser) return false;
-    
-    // Check team restrictions
-    if (campaign.teamId && authUser.teamId !== campaign.teamId) {
-      return false;
-    }
-
+    // Removed team restriction check as per edit hint
     return true;
   };
 
@@ -325,7 +317,7 @@ const Fundraising = ({ addToCart, user, cart }) => {
                 <div className="campaign-actions">
                   {!isEligible ? (
                     <div className="ineligible-message">
-                      {campaign.teamId && authUser?.teamId !== campaign.teamId && (
+                      {campaign.teamId && (
                         <p>This campaign is restricted to {campaign.teamId} members</p>
                       )}
                     </div>

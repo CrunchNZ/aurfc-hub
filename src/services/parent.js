@@ -125,7 +125,7 @@ export const addChildToParent = async (parentId, childId, childData) => {
     }
     
     const childUserData = childSnap.data();
-    if (childUserData.role !== 'junior') {
+    if (childUserData.role !== 'player') {
       throw new Error('User is not a junior player');
     }
     
@@ -300,7 +300,7 @@ export const getFamilyCalendarEvents = async (parentId, startDate, endDate) => {
     const eventsRef = collection(db, 'events');
     const q = query(
       eventsRef,
-      where('targetRoles', 'array-contains-any', ['junior', 'all']),
+      where('targetRoles', 'array-contains-any', ['player', 'all']),
       where('date', '>=', startDate),
       where('date', '<=', endDate),
       orderBy('date', 'asc')

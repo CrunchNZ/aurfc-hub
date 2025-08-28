@@ -83,7 +83,7 @@ const CoachDashboard = () => {
   }, []);
 
   // Navigation functions
-  const navigateToTeamManagement = () => navigate('/team-management');
+  const navigateToTeam = () => navigate('/team-management');
   const navigateToSchedule = () => navigate('/calendar');
   const navigateToCommunications = () => navigate('/chat');
   const navigateToPerformance = () => navigate('/reports');
@@ -259,7 +259,7 @@ const CoachDashboard = () => {
                 </button>
                 
                 <button
-                  onClick={navigateToTeamManagement}
+                  onClick={navigateToTeam}
                   className="bg-purple-600 text-white p-4 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center space-x-3"
                 >
                   <Users className="h-5 w-5" />
@@ -267,7 +267,7 @@ const CoachDashboard = () => {
                 </button>
                 
                 <button
-                  onClick={navigateToTeamManagement}
+                  onClick={navigateToTeam}
                   className="bg-orange-600 text-white p-4 rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center space-x-3"
                 >
                   <Trophy className="h-5 w-5" />
@@ -433,7 +433,7 @@ const CoachDashboard = () => {
               </div>
               
               <button
-                onClick={navigateToTeamManagement}
+                onClick={navigateToTeam}
                 className="w-full mt-4 bg-primary text-white p-3 rounded-lg hover:bg-primary-dark transition-colors flex items-center justify-center space-x-2"
               >
                 <Settings className="h-4 w-4" />

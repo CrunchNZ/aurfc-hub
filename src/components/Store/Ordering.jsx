@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
 
 
-const Ordering = ({ addToCart, user, cart }) => {
-  const { user: authUser } = useAuth();
-  const [groupOrders, setGroupOrders] = useState([]);
+const Ordering = ({ addToCart, cart }) => {
+  const [orderingItems, setOrderingItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
@@ -123,7 +121,7 @@ const Ordering = ({ addToCart, user, cart }) => {
         }
       ];
 
-      setGroupOrders(mockGroupOrders);
+      setOrderingItems(mockGroupOrders);
     } catch (err) {
       console.error('Error loading group orders:', err);
       setError('Failed to load group orders');
@@ -142,7 +140,7 @@ const Ordering = ({ addToCart, user, cart }) => {
     addToCart(cartItem);
   };
 
-  const filteredOrders = groupOrders.filter(order => {
+  const filteredOrders = orderingItems.filter(order => {
     const matchesFilter = filter === 'all' || order.category === filter;
     const matchesSearch = order.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          order.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -176,10 +174,10 @@ const Ordering = ({ addToCart, user, cart }) => {
   };
 
   const checkEligibility = (order) => {
-    if (!authUser) return false;
+    // Removed authUser check as it's no longer needed
     
     // Check team restrictions
-    if (order.teamId && authUser.teamId !== order.teamId) {
+    if (order.teamId && order.teamId !== 'all-teams') { // Assuming 'all-teams' is the default or no team restriction
       return false;
     }
 
@@ -344,7 +342,7 @@ const Ordering = ({ addToCart, user, cart }) => {
                 <div className="order-actions">
                   {!isEligible ? (
                     <div className="ineligible-message">
-                      {order.teamId && authUser?.teamId !== order.teamId && (
+                      {order.teamId && order.teamId !== 'all-teams' && (
                         <p>This order is restricted to {order.teamId} members</p>
                       )}
                       {status === 'closed' && (

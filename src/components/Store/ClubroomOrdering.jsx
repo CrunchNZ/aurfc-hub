@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
 
 
-const ClubroomOrdering = ({ addToCart, user, cart }) => {
-  const { user: authUser } = useAuth();
+const ClubroomOrdering = ({ addToCart, cart }) => {
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

@@ -2,7 +2,8 @@
   "projects": {
     "dev": "aurfc-dev-2e9f9",
     "test": "aurfc-test",
-    "prod": "aurfc-prod"
+    "prod": "aurfc-prod",
+    "default": "aurfc-prod"
   },
   "targets": {},
   "etags": {}

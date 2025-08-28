@@ -146,7 +146,7 @@ export const initializeDefaultChatRooms = async () => {
       id: 'general',
       name: 'General Chat',
       description: 'General discussions for all club members',
-      allowedRoles: ['coach', 'player', 'junior', 'parent', 'admin'],
+      allowedRoles: ['coach', 'player', 'parent', 'admin'],
       isPublic: true,
       createdBy: 'system'
     },
@@ -170,7 +170,7 @@ export const initializeDefaultChatRooms = async () => {
       id: 'juniors',
       name: 'Junior Players',
       description: 'Chat for junior players and their parents',
-      allowedRoles: ['junior', 'parent', 'coach', 'admin'],
+      allowedRoles: ['player', 'parent', 'coach', 'admin'],
       isPublic: true,
       createdBy: 'system'
     }

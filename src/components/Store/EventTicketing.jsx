@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
 
 
-const EventTicketing = ({ addToCart, user, cart }) => {
-  const { user: authUser } = useAuth();
+const EventTicketing = ({ addToCart, cart }) => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -154,22 +152,8 @@ const EventTicketing = ({ addToCart, user, cart }) => {
   };
 
   const checkEligibility = (event) => {
-    if (!authUser) return false;
-    
-    // Check team restrictions
-    if (event.teamId && authUser.teamId !== event.teamId) {
-      return false;
-    }
-
-    // Check if user already has tickets
-    const existingTickets = cart.find(item => 
-      item.type === 'event' && item.id === event.id
-    );
-    
-    if (existingTickets && existingTickets.quantity >= event.maxTicketsPerPerson) {
-      return false;
-    }
-
+    // Since store is now public, all events are available
+    // In the future, this could be enhanced with team-specific logic
     return true;
   };
 

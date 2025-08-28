@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
 
-
-const RegistrationPayments = ({ addToCart, user, cart }) => {
-  const { user: authUser } = useAuth();
-  const [membershipOptions, setMembershipOptions] = useState([]);
+const RegistrationPayments = ({ addToCart, cart }) => {
+  const [registrationOptions, setRegistrationOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedMembership, setSelectedMembership] = useState(null);
@@ -87,7 +84,7 @@ const RegistrationPayments = ({ addToCart, user, cart }) => {
         }
       ];
 
-      setMembershipOptions(mockMemberships);
+      setRegistrationOptions(mockMemberships);
     } catch (err) {
       console.error('Error loading membership options:', err);
       setError('Failed to load membership options');
@@ -110,22 +107,9 @@ const RegistrationPayments = ({ addToCart, user, cart }) => {
   };
 
   const checkEligibility = (membership) => {
-    if (!authUser) return false;
-    
-    // Check age-based eligibility
-    if (membership.maxAge && authUser.age > membership.maxAge) {
-      return false;
-    }
-    if (membership.minAge && authUser.age < membership.minAge) {
-      return false;
-    }
-
-    // Check if user already has this membership type
-    const existingMembership = cart.find(item => 
-      item.type === 'membership' && item.id === membership.id
-    );
-    
-    return !existingMembership;
+    // Since store is now public, all registration options are available
+    // In the future, this could be enhanced with age-based logic
+    return true;
   };
 
   const getMembershipStatus = () => {
@@ -171,7 +155,7 @@ const RegistrationPayments = ({ addToCart, user, cart }) => {
       </div>
 
       <div className="membership-options">
-        {membershipOptions.map(membership => {
+        {registrationOptions.map(membership => {
           const isEligible = checkEligibility(membership);
           const isInCart = cart.some(item => 
             item.type === 'membership' && item.id === membership.id

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   auth, 
-  onAuthStateChange, 
+  listenToAuthState, 
   getCurrentUserProfile,
   logout as authLogout
 } from '../services/auth';
@@ -42,20 +42,63 @@ export const AuthProvider = ({ children }) => {
 
   // Handle authentication state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChange(async (user) => {
-      setCurrentUser(user);
-      
-      if (user) {
-        await loadUserProfile(user);
-      } else {
-        setUserProfile(null);
-      }
-      
+    console.log('AuthContext: useEffect triggered');
+    
+    // Check if Firebase auth is available
+    if (!auth) {
+      console.error('AuthContext: Firebase auth is not available');
+      setError('Firebase authentication is not available');
       setLoading(false);
-    });
+      return;
+    }
+    
+    try {
+      console.log('AuthContext: Setting up auth state listener...');
+      const unsubscribe = listenToAuthState(async (user) => {
+        console.log('AuthContext: onAuthStateChange - user:', user);
+        
+        try {
+          setCurrentUser(user);
+          
+          if (user) {
+            console.log('AuthContext: User logged in, loading profile...');
+            try {
+              await loadUserProfile(user);
+              console.log('AuthContext: User profile loaded:', userProfile);
+            } catch (error) {
+              console.error('AuthContext: Error loading user profile:', error);
+              setError(error.message);
+            }
+          } else {
+            console.log('AuthContext: User logged out.');
+            setUserProfile(null);
+          }
+          
+          setLoading(false);
+          console.log('AuthContext: Loading set to false.');
+        } catch (error) {
+          console.error('AuthContext: Error in onAuthStateChange callback:', error);
+          setError(error.message);
+          setLoading(false);
+        }
+      });
 
-    // Cleanup subscription
-    return () => unsubscribe();
+      console.log('AuthContext: Auth state listener set up successfully');
+      
+      // Cleanup subscription
+      return () => {
+        console.log('AuthContext: Cleaning up subscription');
+        try {
+          unsubscribe();
+        } catch (cleanupError) {
+          console.error('AuthContext: Error during cleanup:', cleanupError);
+        }
+      };
+    } catch (error) {
+      console.error('AuthContext: Error setting up auth listener:', error);
+      setError(error.message);
+      setLoading(false);
+    }
   }, []);
 
   // Logout function

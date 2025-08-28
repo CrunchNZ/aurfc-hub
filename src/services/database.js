@@ -722,86 +722,7 @@ export const badgesService = {
   }
 };
 
-// ============================================================================
-// JUNIORS COLLECTION
-// ============================================================================
 
-export const juniorsService = {
-  // Create junior profile
-  async createJuniorProfile(juniorId, juniorData) {
-    try {
-      const juniorRef = doc(db, 'juniors', juniorId);
-      await setDoc(juniorRef, addTimestamps(juniorData));
-      return { id: juniorId, ...juniorData };
-    } catch (error) {
-      console.error('Error creating junior profile:', error);
-      throw error;
-    }
-  },
-
-  // Get junior profile
-  async getJuniorProfile(juniorId) {
-    try {
-      const juniorRef = doc(db, 'juniors', juniorId);
-      const juniorSnap = await getDoc(juniorRef);
-      
-      if (juniorSnap.exists()) {
-        return { id: juniorSnap.id, ...juniorSnap.data() };
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting junior profile:', error);
-      throw error;
-    }
-  },
-
-  // Update junior profile
-  async updateJuniorProfile(juniorId, updates) {
-    try {
-      const juniorRef = doc(db, 'juniors', juniorId);
-      await updateDoc(juniorRef, updateTimestamp(updates));
-      return { id: juniorId, ...updates };
-    } catch (error) {
-      console.error('Error updating junior profile:', error);
-      throw error;
-    }
-  },
-
-  // Add note to junior
-  async addNoteToJunior(juniorId, noteData) {
-    try {
-      const juniorRef = doc(db, 'juniors', juniorId);
-      const noteId = `note_${Date.now()}`;
-      
-      await updateDoc(juniorRef, {
-        [`notes.${noteId}`]: {
-          ...noteData,
-          timestamp: serverTimestamp()
-        },
-        updatedAt: serverTimestamp()
-      });
-      
-      return { id: noteId, ...noteData };
-    } catch (error) {
-      console.error('Error adding note to junior:', error);
-      throw error;
-    }
-  },
-
-  // Update junior skills
-  async updateJuniorSkills(juniorId, skills) {
-    try {
-      const juniorRef = doc(db, 'juniors', juniorId);
-      await updateDoc(juniorRef, {
-        'progress.skills': skills,
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      console.error('Error updating junior skills:', error);
-      throw error;
-    }
-  }
-};
 
 // ============================================================================
 // EXPORT ALL SERVICES
@@ -813,6 +734,5 @@ export default {
   events: eventsService,
   performances: performancesService,
   drills: drillsService,
-  badges: badgesService,
-  juniors: juniorsService
+  badges: badgesService
 };

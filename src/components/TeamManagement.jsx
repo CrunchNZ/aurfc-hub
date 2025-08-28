@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { 
   createTeam,
   getAllTeams,
@@ -44,6 +45,7 @@ function TeamManagement() {
   });
 
   const { currentUser: user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
       if (user) {
@@ -179,7 +181,7 @@ function TeamManagement() {
   const tabs = [
     {
       id: 'teams',
-      label: 'Team Management',
+      label: 'Team',
       icon: Users,
       description: 'Create and manage rugby teams'
     },
@@ -191,9 +193,9 @@ function TeamManagement() {
     },
     {
       id: 'team-builder',
-      label: 'Team Builder',
+      label: 'GameDay',
       icon: Trophy,
-      description: 'Build game day rosters'
+      description: 'Advanced match day management'
     },
     {
       id: 'attendance',
@@ -233,7 +235,7 @@ function TeamManagement() {
             >
               <Trophy size={40} className="text-white" />
             </motion.div>
-            <h1 className="text-3xl font-bold mb-2">Team Management</h1>
+            <h1 className="text-3xl font-bold mb-2">Team</h1>
             <p className="text-white/80 text-lg">Create and manage rugby teams for different age groups</p>
           </div>
         </motion.div>
@@ -313,7 +315,7 @@ function TeamManagement() {
                     <div className="p-2 bg-primary/10 rounded-lg">
                       <Users size={24} className="text-primary" />
                     </div>
-                    <h2 className="text-2xl font-bold text-text-primary">Team Management</h2>
+                    <h2 className="text-2xl font-bold text-text-primary">Team</h2>
                   </div>
                   <button
                     onClick={() => setShowAddTeam(true)}
@@ -493,20 +495,42 @@ function TeamManagement() {
                   <div className="p-2 bg-primary/10 rounded-lg">
                     <Trophy size={24} className="text-primary" />
                   </div>
-                  <h2 className="text-2xl font-bold text-text-primary">Team Builder</h2>
+                  <h2 className="text-2xl font-bold text-text-primary">GameDay Management</h2>
                 </div>
                 
                 <div className="text-center py-8">
-                  <div className="text-text-secondary mb-4">
-                    <Trophy size={48} className="mx-auto mb-4 text-primary/40" />
-                    <p className="text-lg font-medium">Team Builder Coming Soon</p>
-                    <p className="text-sm">Build game day rosters and manage team lineups</p>
+                  <div className="text-text-secondary mb-6">
+                    <Trophy size={48} className="mx-auto mb-4 text-yellow-500" />
+                    <p className="text-lg font-medium text-text-primary mb-2">Advanced Match Day Management</p>
+                    <p className="text-sm text-text-secondary">Replace the old team builder with our comprehensive GameDay system</p>
                   </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-left">
+                    <div className="bg-gradient-to-r from-blue-50 to-green-50 p-4 rounded-lg border-2 border-blue-200">
+                      <h3 className="text-lg font-semibold text-blue-800 mb-3">🎯 Live Match Control</h3>
+                      <ul className="text-sm text-blue-700 space-y-1">
+                        <li>• Start, pause, and manage match timer</li>
+                        <li>• Track possession and territory in real-time</li>
+                        <li>• Record scoring events (Try, Conversion, Penalty)</li>
+                        <li>• Monitor errors and penalties for both teams</li>
+                      </ul>
+                    </div>
+                    <div className="bg-gradient-to-r from-green-50 to-yellow-50 p-4 rounded-lg border-2 border-green-200">
+                      <h3 className="text-lg font-semibold text-green-800 mb-3">👥 Smart Team Management</h3>
+                      <ul className="text-sm text-green-700 space-y-1">
+                        <li>• Drag & drop player positioning (1-15 formation)</li>
+                        <li>• Intelligent player suggestions based on preferences</li>
+                        <li>• Mark players as injured/absent with status management</li>
+                        <li>• Quick assignment to next available position</li>
+                      </ul>
+                    </div>
+                  </div>
+                  
                   <button 
-                    onClick={() => window.location.href = '/team-builder'}
-                    className="btn-primary"
+                    onClick={() => navigate('/gameday')}
+                    className="btn-primary text-lg px-8 py-4"
                   >
-                    Go to Team Builder
+                    🏉 Launch GameDay
                   </button>
                 </div>
               </div>
@@ -532,11 +556,14 @@ function TeamManagement() {
                 
                 <div className="text-center py-8">
                   <div className="text-text-secondary mb-4">
-                    <UserCheck size={48} className="mx-auto mb-4 text-accent-green/40" />
-                    <p className="text-lg font-medium">Attendance System Coming Soon</p>
+                    <UserCheck size={48} className="mx-auto mb-4 text-accent-green" />
+                    <p className="text-lg font-medium text-accent-green">Attendance System Ready!</p>
                     <p className="text-sm">Track player attendance for training and games</p>
                   </div>
-                  <button className="btn-secondary">
+                  <button 
+                    className="btn-primary"
+                    onClick={() => navigate('/attendance')}
+                  >
                     Set Up Attendance
                   </button>
                 </div>

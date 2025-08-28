@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import { motion } from 'framer-motion';
+import { X, Minus, Plus, ShoppingCart, CreditCard } from 'lucide-react';
 import CheckoutForm from './CheckoutForm';
 
 
@@ -11,8 +12,7 @@ const Cart = ({
   getCartTotal, 
   onClose 
 }) => {
-  const { user } = useAuth();
-  const [showCheckout, setShowCheckout] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   if (cart.length === 0) {
     return (
@@ -34,23 +34,22 @@ const Cart = ({
   }
 
   const handleCheckout = () => {
-    setShowCheckout(true);
+    setIsCheckingOut(true);
   };
 
   const handleCheckoutComplete = () => {
     clearCart();
-    setShowCheckout(false);
+    setIsCheckingOut(false);
     onClose();
   };
 
-  if (showCheckout) {
+  if (isCheckingOut) {
     return (
       <CheckoutForm
         cart={cart}
         total={getCartTotal()}
-        user={user}
         onComplete={handleCheckoutComplete}
-        onCancel={() => setShowCheckout(false)}
+        onCancel={() => setIsCheckingOut(false)}
       />
     );
   }

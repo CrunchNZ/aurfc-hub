@@ -10,8 +10,10 @@ import Profile from './components/Profile';
 import Chat from './components/Chat';
 import TeamManagement from './components/TeamManagement';
 import TeamBuilder from './components/TeamBuilder';
+import GameDay from './components/GameDay';
+import Attendance from './components/Attendance';
 import Calendar from './components/Calendar';
-import JuniorPortal from './components/JuniorPortal';
+// JuniorPortal component has been removed
 import Store from './components/Store/Store';
 import AdminStore from './components/Store/AdminStore';
 import FirebaseTest from './components/FirebaseTest';
@@ -117,7 +119,7 @@ function App() {
 
                     <div style={{ margin: '20px 0' }}>
                       <h3>JuniorPortal Component Test:</h3>
-                      <JuniorPortal />
+                      <p style={{ color: 'red' }}>JuniorPortal component has been removed</p>
                     </div>
 
                     <div style={{ margin: '20px 0' }}>
@@ -131,9 +133,8 @@ function App() {
                 <Route path="/dashboard" element={
                   <AuthenticatedRoute>
                     <AuthenticatedLayout>
-                      <ErrorBoundary>
-                        <RoleBasedDashboard />
-                      </ErrorBoundary>
+                      {/* Temporarily bypassing ErrorBoundary for debugging */}
+                      <RoleBasedDashboard />
                     </AuthenticatedLayout>
                   </AuthenticatedRoute>
                 } />
@@ -260,6 +261,26 @@ function App() {
                   </CoachRoute>
                 } />
 
+                <Route path="/gameday" element={
+                  <AuthenticatedRoute>
+                    <AuthenticatedLayout>
+                      <ErrorBoundary>
+                        <GameDay />
+                      </ErrorBoundary>
+                    </AuthenticatedLayout>
+                  </AuthenticatedRoute>
+                } />
+
+                <Route path="/attendance" element={
+                  <CoachRoute>
+                    <AuthenticatedLayout>
+                      <ErrorBoundary>
+                        <Attendance />
+                      </ErrorBoundary>
+                    </AuthenticatedLayout>
+                  </CoachRoute>
+                } />
+
                 <Route path="/calendar" element={
                   <AuthenticatedRoute>
                     <AuthenticatedLayout>
@@ -280,15 +301,7 @@ function App() {
                   </AuthenticatedRoute>
                 } />
 
-                <Route path="/junior-portal" element={
-                  <JuniorRoute>
-                    <AuthenticatedLayout>
-                      <ErrorBoundary>
-                        <JuniorPortal />
-                      </ErrorBoundary>
-                    </AuthenticatedLayout>
-                  </JuniorRoute>
-                } />
+                {/* Junior Portal route has been removed */}
 
                 <Route path="/store" element={
                   <AuthenticatedRoute>
