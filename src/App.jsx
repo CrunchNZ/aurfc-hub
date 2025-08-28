@@ -13,6 +13,10 @@ import TeamBuilder from './components/TeamBuilder';
 import GameDay from './components/GameDay';
 import Attendance from './components/Attendance';
 import Calendar from './components/Calendar';
+import PerformanceDashboard from './components/PerformanceDashboard';
+import PlayerDevelopment from './components/PlayerDevelopment';
+import MatchAnalysis from './components/MatchAnalysis';
+import SeasonStatistics from './components/SeasonStatistics';
 // JuniorPortal component has been removed
 import Store from './components/Store/Store';
 import AdminStore from './components/Store/AdminStore';
@@ -352,6 +356,47 @@ function App() {
                       <AdminStore />
                     </div>
                   </AdminRoute>
+                } />
+
+                {/* Advanced Analytics Routes */}
+                <Route path="/performance" element={
+                  <AuthenticatedRoute>
+                    <AuthenticatedLayout>
+                      <ErrorBoundary>
+                        <PerformanceDashboard />
+                      </ErrorBoundary>
+                    </AuthenticatedLayout>
+                  </AuthenticatedRoute>
+                } />
+
+                <Route path="/player-development" element={
+                  <AuthenticatedRoute>
+                    <AuthenticatedLayout>
+                      <ErrorBoundary>
+                        <PlayerDevelopment />
+                      </ErrorBoundary>
+                    </AuthenticatedLayout>
+                  </AuthenticatedRoute>
+                } />
+
+                <Route path="/match-analysis" element={
+                  <AuthenticatedRoute>
+                    <AuthenticatedLayout>
+                      <ErrorBoundary>
+                        <MatchAnalysis />
+                      </ErrorBoundary>
+                    </AuthenticatedLayout>
+                  </AuthenticatedRoute>
+                } />
+
+                <Route path="/season-stats" element={
+                  <AuthenticatedRoute>
+                    <AuthenticatedLayout>
+                      <ErrorBoundary>
+                        <SeasonStatistics />
+                      </ErrorBoundary>
+                    </AuthenticatedLayout>
+                  </AuthenticatedRoute>
                 } />
 
                 {/* Development/testing routes */}
